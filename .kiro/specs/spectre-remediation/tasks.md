@@ -8,11 +8,11 @@
     owner, timestamp, and result
     - _Requirements: 1.2, 2.2, 3.1_
 
-- [ ] 2. Revoke an "anyone" link
-  - [ ] 2.1 DELETE the anonymous permission via Graph using the
+- [x] 2. Revoke an "anyone" link
+  - [x] 2.1 DELETE the anonymous permission via Graph using the
     permission id from the scan
     - _Requirements: 1.1_
-  - [ ] 2.2 On failure, keep the finding open and record the error; never
+  - [x] 2.2 On failure, keep the finding open and record the error; never
     mark fixed
     - _Requirements: 1.3_
 

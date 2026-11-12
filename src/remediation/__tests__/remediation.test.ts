@@ -8,6 +8,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createDispatcher } from "../dispatcher.js";
+import { createRevokeLinkHandler } from "../revoke-link.js";
 import type { AuditLog } from "../audit.js";
 import type { ActionHandler, AuditEntry, Decision, RemediationAction } from "../types.js";
 import type { FindingStore } from "../../store/FindingStore.js";
@@ -177,5 +178,45 @@ describe("SqliteAuditLog", () => {
       restorePath: null,
     });
     assert.deepEqual(await audit.listByFinding("x"), [e]);
+  });
+});
+
+describe("restrict handler: revoke anonymous link (tasks 2.1, 2.2)", () => {
+  const link = { driveId: "d1", itemId: "i1", permissionId: "p1" };
+  const setup = (api: (path: string) => { delete: () => Promise<void> }, withLink = true) => {
+    const f = makeFinding("f1", "overshared-site");
+    if (withLink) f.numbers = { anonymousLink: link };
+    const store = fakeStore([f]);
+    const audit = fakeAudit();
+    const handler = createRevokeLinkHandler({ api } as never);
+    return { store, audit, d: createDispatcher({ store, audit, handlers: { restrict: handler } }) };
+  };
+
+  it("DELETEs the recorded permission and marks the finding actioned", async () => {
+    const calls: string[] = [];
+    const { d, store } = setup((p) => ({ delete: async () => void calls.push(p) }));
+    await d.dispatch(decision("f1", "restrict"));
+    assert.deepEqual(calls, ["/drives/d1/items/i1/permissions/p1"]);
+    assert.equal((await store.getById("f1"))?.status, "actioned");
+  });
+
+  it("keeps the finding open and records the error when Graph fails", async () => {
+    const { d, store, audit } = setup(() => ({
+      delete: async () => { throw new Error("403 Forbidden"); },
+    }));
+    await d.dispatch(decision("f1", "restrict"));
+    assert.equal((await store.getById("f1"))?.status, "open");
+    const [e] = await audit.listByFinding("f1");
+    assert.equal(e.result, "failure");
+    assert.equal(e.error, "403 Forbidden");
+  });
+
+  it("makes no Graph call and stays open when no permission id was recorded", async () => {
+    let called = false;
+    const { d, store, audit } = setup(() => { called = true; return { delete: async () => {} }; }, false);
+    await d.dispatch(decision("f1", "restrict"));
+    assert.equal(called, false);
+    assert.equal((await store.getById("f1"))?.status, "open");
+    assert.equal((await audit.listByFinding("f1"))[0].result, "failure");
   });
 });

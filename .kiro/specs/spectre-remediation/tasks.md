@@ -1,10 +1,10 @@
 # Spectre Remediation — Tasks
 
-- [ ] 1. Dispatcher
-  - [ ] 1.1 Route an approved decision to the right action by ghost
+- [x] 1. Dispatcher
+  - [x] 1.1 Route an approved decision to the right action by ghost
     type; refuse any action without a recorded approval
     - _Requirements: 1.1, 2.1, 3.1_
-  - [ ] 1.2 Write one audit log entry per action with finding id, target,
+  - [x] 1.2 Write one audit log entry per action with finding id, target,
     owner, timestamp, and result
     - _Requirements: 1.2, 2.2, 3.1_
 

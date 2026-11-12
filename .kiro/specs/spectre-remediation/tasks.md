@@ -16,11 +16,11 @@
     mark fixed
     - _Requirements: 1.3_
 
-- [ ] 3. Archive a cold site
-  - [ ] 3.1 Archive through the SharePoint admin surface under a
+- [x] 3. Archive a cold site
+  - [x] 3.1 Archive through the SharePoint admin surface under a
     delegated admin session
     - _Requirements: 2.1_
-  - [ ] 3.2 Without a delegated session, queue for the admin with the
+  - [x] 3.2 Without a delegated session, queue for the admin with the
     exact command; never execute blindly
     - _Design: Archive a cold site_
 

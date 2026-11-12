@@ -31,7 +31,7 @@ export function narrate(f: Finding): string {
   const ask = "Please choose Keep, Restrict or Archive.";
   switch (f.type) {
     case "overshared-site":
-      return `${label} can be reached through a ${n.linkScope ?? UNKNOWN} link by ${num(n.reachableUserCount)} people. ${ask}`;
+      return `${label} can be reached through a link (scope: ${n.linkScope ?? UNKNOWN}) by ${num(n.reachableUserCount)} people. ${ask}`;
     case "orphaned-site":
       return `${label} has no owner on record. ${ask}`;
     case "stale-guest":
@@ -39,7 +39,7 @@ export function narrate(f: Finding): string {
         ? `Guest ${label} still has access and we have no sign-in record for them. ${ask}`
         : `Guest ${label} still has access and last signed in on ${n.lastSignInAt}. ${ask}`;
     case "idle-licence":
-      return `${label} holds a ${n.skuPartNumber ?? UNKNOWN} licence with no recent activity, at ${money(n.monthlyCostUsd)}. ${ask}`;
+      return `${label} holds a licence (SKU: ${n.skuPartNumber ?? UNKNOWN}) with no recent activity, at ${money(n.monthlyCostUsd)}. ${ask}`;
     case "cold-storage":
       return `${label} was last modified on ${when(n.lastModifiedAt)} and uses ${num(n.storageSizeBytes, " bytes")}, with an overage cost of ${money(n.storageOverageCostUsd)}. ${ask}`;
   }

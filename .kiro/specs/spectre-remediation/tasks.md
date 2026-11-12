@@ -24,8 +24,8 @@
     exact command; never execute blindly
     - _Design: Archive a cold site_
 
-- [ ] 4. Expire a stale guest
-  - [ ] 4.1 DELETE the guest user via Graph; record the 30-day restore
+- [x] 4. Expire a stale guest
+  - [x] 4.1 DELETE the guest user via Graph; record the 30-day restore
     path
     - _Requirements: 3.1, 3.2_
 

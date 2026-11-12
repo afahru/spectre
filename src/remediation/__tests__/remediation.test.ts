@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createDispatcher } from "../dispatcher.js";
 import { createRevokeLinkHandler } from "../revoke-link.js";
+import { createArchiveSiteHandler, archiveCommand } from "../archive-site.js";
 import type { AuditLog } from "../audit.js";
 import type { ActionHandler, AuditEntry, Decision, RemediationAction } from "../types.js";
 import type { FindingStore } from "../../store/FindingStore.js";
@@ -218,5 +219,58 @@ describe("restrict handler: revoke anonymous link (tasks 2.1, 2.2)", () => {
     assert.equal(called, false);
     assert.equal((await store.getById("f1"))?.status, "open");
     assert.equal((await audit.listByFinding("f1"))[0].result, "failure");
+  });
+});
+
+describe("archive handler (tasks 3.1, 3.2)", () => {
+  const graph = (webUrl?: string) =>
+    ({ api: () => ({ select: () => ({ get: async () => ({ webUrl }) }) }) }) as never;
+
+  const run = async (handler: ActionHandler) => {
+    const store = fakeStore([makeFinding("c1", "cold-storage")]);
+    const audit = fakeAudit();
+    const d = createDispatcher({ store, audit, handlers: { archive: handler } });
+    const res = await d.dispatch(decision("c1", "archive"));
+    assert.equal(res.status, "executed");
+    if (res.status !== "executed") throw new Error("unreachable");
+    return res;
+  };
+
+  it("archives under a delegated session and marks the finding actioned", async () => {
+    let archived = "";
+    const res = await run(
+      createArchiveSiteHandler(graph("https://t.sharepoint.com/sites/cs1"), {
+        archiveSite: async (u) => void (archived = u),
+      })
+    );
+    assert.equal(archived, "https://t.sharepoint.com/sites/cs1");
+    assert.equal(res.entry.result, "success");
+    assert.equal(res.finding?.status, "actioned");
+    assert.ok(res.entry.restorePath);
+  });
+
+  it("queues the exact command without a session and keeps the finding open", async () => {
+    const res = await run(createArchiveSiteHandler(graph("https://t.sharepoint.com/sites/cs1")));
+    assert.equal(res.entry.result, "queued");
+    assert.ok(res.entry.error?.includes(archiveCommand("https://t.sharepoint.com/sites/cs1")));
+    assert.equal(res.finding?.status, "open");
+  });
+
+  it("fails and keeps the finding open when the session errors", async () => {
+    const res = await run(
+      createArchiveSiteHandler(graph("https://t.sharepoint.com/sites/cs1"), {
+        archiveSite: async () => {
+          throw new Error("boom");
+        },
+      })
+    );
+    assert.equal(res.entry.result, "failure");
+    assert.equal(res.finding?.status, "open");
+  });
+
+  it("fails without a site URL and never invents one", async () => {
+    const res = await run(createArchiveSiteHandler(graph(undefined), { archiveSite: async () => {} }));
+    assert.equal(res.entry.result, "failure");
+    assert.equal(res.finding?.status, "open");
   });
 });

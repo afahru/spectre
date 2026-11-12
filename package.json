@@ -7,7 +7,11 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts"
+    "dev": "ts-node src/index.ts",
+    "test": "tsc && node --test dist/scorer/__tests__/scorer.test.js",
+    "test:scorer": "tsc && node --test dist/scorer/__tests__/scorer.test.js",
+    "seed": "ts-node src/seeder/index.ts",
+    "verify": "ts-node src/seeder/verify.ts"
   },
   "dependencies": {
     "@azure/identity": "4.4.1",

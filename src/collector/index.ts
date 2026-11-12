@@ -29,6 +29,8 @@ import type { SiteRecord, GuestRecord, UserLicenceRecord, SkuRecord } from "./ty
 export type { SiteRecord, GuestRecord, UserLicenceRecord, SkuRecord };
 export type { SkuPriceTable };
 export { CollectorProgressStore };
+export { fetchPermissions, PermissionsCache } from "./permissions.js";
+export type { FetchPermissionsInput, FetchPermissionsResult, LinkScope } from "./permissions.js";
 
 export interface InventoryInput {
   /** Authenticated Graph client. */

@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Run scorer tests on save",
+      "trigger": "PostFileSave",
+      "description": "Run the scorer unit tests whenever a scorer source file is saved",
+      "matcher": "src/scorer/.*\\.ts$",
+      "action": {
+        "type": "command",
+        "command": "cd /data/workspace/spectre && npm test 2>&1",
+        "timeout": 120
+      }
+    }
+  ]
+}

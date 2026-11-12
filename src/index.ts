@@ -7,15 +7,16 @@
  *   3. Build the Graph client.
  *   4. Run (or resume) the inventory collection.
  *   5. Run the flagging heuristics (task 3) — metadata only, no permissions.
- *   6. (Task 4 will add the permissions fetcher for flagged items.)
- *   7. (Task 5 will add the risk scorer.)
+ *   6. Run the permissions fetcher (task 4) — flagged items only, with cache.
+ *   7. Compute the Copilot-readiness score (task 5) — deterministic, no I/O.
  */
 
 import { loadConfig } from "./config.js";
 import { createGraphClient } from "./graph/index.js";
 import { SqliteFindingStore } from "./store/index.js";
-import { CollectorProgressStore, runInventory } from "./collector/index.js";
+import { CollectorProgressStore, runInventory, fetchPermissions } from "./collector/index.js";
 import { runFlagging } from "./flagger/index.js";
+import { computeScore, countsFromFindings } from "./scorer/index.js";
 
 async function main(): Promise<void> {
   // 1. Validate config — throws with a clear message if any variable is absent.
@@ -69,6 +70,43 @@ async function main(): Promise<void> {
   console.log(
     `Scan ${scanTimestamp} flagging complete: ` +
       `${candidates.length} candidates → ${findings.length} findings persisted.`
+  );
+
+  // 6. Fetch permissions for flagged items (task 4).
+  //    Only overshared-site findings get a permissions call; nothing else.
+  //    Results are cached by (siteId, scanTimestamp) so a re-run skips
+  //    already-resolved items.  Unreadable items are recorded, not thrown.
+  const permResult = await fetchPermissions({
+    client: graphClient,
+    findings,
+    store,
+    dbPath: config.dbPath,
+    scanTimestamp,
+  });
+
+  console.log(
+    `Scan ${scanTimestamp} permissions: ` +
+      `fetched=${permResult.fetched}, cached=${permResult.cached}, ` +
+      `unreadable=${permResult.unreadable}.`
+  );
+
+  // 7. Compute the Copilot-readiness score (task 5).
+  //    Pure function: reads the findings for this scan from the store,
+  //    counts them by type, then computes score = max(0, floor(100 × (1 − penalty/maxPenalty))).
+  //    No Graph calls, no invented numbers.
+  const scanFindings = await store.listByScan(scanTimestamp);
+  const ghostCounts = countsFromFindings(scanFindings);
+  const scoreResult = computeScore(ghostCounts, scanTimestamp);
+
+  console.log(
+    `Scan ${scanTimestamp} readiness score: ${scoreResult.score}/100 ` +
+      `(penalty=${scoreResult.inputs.totalPenalty}/${scoreResult.inputs.maxPenalty}).`
+  );
+  console.log(
+    "  Breakdown: " +
+      scoreResult.inputs.breakdown
+        .map((b) => `${b.type}=${b.count}×${b.weight}=${b.penalty}`)
+        .join(", ")
   );
 
   // Graceful shutdown.

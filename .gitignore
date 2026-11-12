@@ -3,3 +3,6 @@ dist/
 .env
 *.log
 .DS_Store
+# demo database and scan-cursor files produced at runtime
+spectre.db
+*.cursor.json

@@ -7,7 +7,7 @@
  * new class that implements this interface.
  */
 
-import type { Finding, FindingStatus, NewFinding } from "./types.js";
+import type { Finding, FindingNumbers, FindingStatus, NewFinding } from "./types.js";
 
 export interface FindingStore {
   /**
@@ -15,6 +15,14 @@ export interface FindingStore {
    * "open", and stamps `updatedAt`.
    */
   insert(finding: NewFinding): Promise<Finding>;
+
+  /**
+   * Patch the `numbers` field of an existing finding.
+   * Used by the permissions fetcher (task 4) to record `linkScope` and
+   * `itemReadable` after the Graph permissions call resolves.
+   * Returns the updated finding, or null if the id is not found.
+   */
+  updateNumbers(id: string, numbers: FindingNumbers): Promise<Finding | null>;
 
   /**
    * Update the status of a finding by id.

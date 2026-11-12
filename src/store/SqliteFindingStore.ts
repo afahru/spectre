@@ -110,6 +110,25 @@ export class SqliteFindingStore implements FindingStore {
     };
   }
 
+  async updateNumbers(
+    id: string,
+    numbers: FindingNumbers
+  ): Promise<Finding | null> {
+    const now = new Date().toISOString();
+
+    const result = this.db
+      .prepare(
+        `UPDATE findings SET numbers = ?, updated_at = ? WHERE id = ?`
+      )
+      .run(JSON.stringify(numbers), now, id);
+
+    if (result.changes === 0) {
+      return null;
+    }
+
+    return this.getById(id);
+  }
+
   async updateStatus(
     id: string,
     status: FindingStatus

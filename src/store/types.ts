@@ -52,6 +52,13 @@ export interface FindingNumbers {
   lastModifiedAt?: string | null;
   /** SKU part number, e.g. "ENTERPRISEPACK". */
   skuPartNumber?: string | null;
+  /**
+   * Whether the permissions call for this item succeeded (task 4).
+   * false means the item was unreadable (e.g. 403); the run continued.
+   * undefined means no permissions call has been attempted yet.
+   * Never invented — set only from the actual Graph call result.
+   */
+  itemReadable?: boolean;
 }
 
 /**

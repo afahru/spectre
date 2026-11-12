@@ -44,7 +44,7 @@
 import Database from "better-sqlite3";
 import type { Client } from "@microsoft/microsoft-graph-client";
 import type { FindingStore } from "../store/FindingStore.js";
-import type { Finding } from "../store/types.js";
+import type { Finding, FindingNumbers } from "../store/types.js";
 import { retryAfterDelay } from "./retry.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -194,6 +194,11 @@ function extractLinkScope(perms: GraphPermission[]): LinkScope | null {
   }
 
   return best;
+}
+
+/** Id of the first anonymous-scoped permission, or undefined when none has one. */
+function findAnonymousPermissionId(perms: GraphPermission[]): string | undefined {
+  return perms.find((p) => p.link?.scope === "anonymous" && p.id)?.id;
 }
 
 /**
@@ -384,6 +389,12 @@ export interface AnonymousLinkSite {
   owner: string | null;
   /** The resolved link scope (always "anonymous" in this result set). */
   linkScope: "anonymous";
+  /**
+   * Graph ids needed to revoke the first anonymous link found. Absent when
+   * Graph did not return them (e.g. result served from the scope-only cache);
+   * never invented.
+   */
+  anonymousLink?: NonNullable<FindingNumbers["anonymousLink"]>;
 }
 
 /**
@@ -447,6 +458,7 @@ export async function detectAnonymousLinks(
       // ── Graph fetch ────────────────────────────────────────────────────
       let linkScope: LinkScope | null = null;
       let itemReadable = true;
+      let anonymousLink: AnonymousLinkSite["anonymousLink"];
 
       try {
         const rootUrl =
@@ -459,8 +471,10 @@ export async function detectAnonymousLinks(
         let childrenChecked = 0;
         try {
           const childrenPage = await client
-            .api(`/sites/${encodeURIComponent(site.id)}/drive/root/children?$select=id,name&$top=50`)
-            .get() as { value: Array<{ id: string; name?: string }> };
+            .api(`/sites/${encodeURIComponent(site.id)}/drive/root/children?$select=id,name,parentReference&$top=50`)
+            .get() as {
+              value: Array<{ id: string; name?: string; parentReference?: { driveId?: string } | null }>;
+            };
           for (const child of childrenPage.value ?? []) {
             childrenChecked++;
             const childPerms = await fetchAllPermissionsPages(
@@ -468,6 +482,11 @@ export async function detectAnonymousLinks(
               `/sites/${encodeURIComponent(site.id)}/drive/items/${child.id}/permissions?$select=id,link,inheritedFrom,roles&$top=200`
             );
             const childScope = extractLinkScope(childPerms);
+            const permissionId = findAnonymousPermissionId(childPerms);
+            const driveId = child.parentReference?.driveId;
+            if (!anonymousLink && permissionId && driveId) {
+              anonymousLink = { driveId, itemId: child.id, permissionId };
+            }
             if (scopeRank(childScope) > scopeRank(linkScope)) {
               linkScope = childScope;
             }
@@ -509,6 +528,7 @@ export async function detectAnonymousLinks(
           siteDisplayName: site.displayName,
           owner: site.owner,
           linkScope: "anonymous",
+          ...(anonymousLink && { anonymousLink }),
         });
       }
     }

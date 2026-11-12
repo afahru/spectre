@@ -131,6 +131,7 @@ async function main(): Promise<void> {
             ...existing.numbers,
             linkScope: "anonymous",
             itemReadable: true,
+            ...(anonSite.anonymousLink && { anonymousLink: anonSite.anonymousLink }),
           });
         }
         continue;
@@ -142,7 +143,11 @@ async function main(): Promise<void> {
         subjectId: anonSite.siteId,
         subjectLabel: anonSite.siteDisplayName,
         owner: anonSite.owner,
-        numbers: { linkScope: "anonymous", itemReadable: true },
+        numbers: {
+          linkScope: "anonymous",
+          itemReadable: true,
+          ...(anonSite.anonymousLink && { anonymousLink: anonSite.anonymousLink }),
+        },
         severityWeight: oversharedWeight,
         scanTimestamp,
       });

@@ -1,0 +1,23 @@
+{
+  "name": "spectre",
+  "version": "0.1.0",
+  "description": "Spectre – M365 oversharing scan engine (Kiroween 2026)",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "@azure/identity": "4.4.1",
+    "@microsoft/microsoft-graph-client": "3.0.7",
+    "better-sqlite3": "11.3.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.11",
+    "@types/node": "22.9.0",
+    "ts-node": "10.9.2",
+    "typescript": "5.6.3"
+  }
+}

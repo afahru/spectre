@@ -31,6 +31,7 @@
  */
 
 import type { Client } from "@microsoft/microsoft-graph-client";
+import { ResponseType } from "@microsoft/microsoft-graph-client";
 import type { SkuRecord, UserLicenceRecord } from "./types.js";
 import { retryAfterDelay } from "./retry.js";
 
@@ -96,12 +97,18 @@ export async function collectLicences(
     enabledUnits: s.prepaidUnits?.enabled ?? 0,
   }));
 
-  // Build a skuId → SkuRecord map for the join below.
-  const skuById = new Map<string, SkuRecord>(skus.map((s) => [s.id, s]));
+  // Build a skuId → SkuRecord map for the join below. /subscribedSkus returns
+  // composite ids ("<tenantId>_<skuGuid>") while assignedLicenses[].skuId is
+  // the bare GUID, so key the map by the GUID part or the join never matches
+  // and every assignment is silently skipped (0 licence assignments).
+  const skuById = new Map<string, SkuRecord>(
+    skus.map((s) => [skuGuid(s.id), s])
+  );
 
   // Step 2: Fetch the 90-day active-user detail report (CSV, single blob).
   // The report returns one row per user with columns including:
-  //   User Principal Name, Last Activity Date, Assigned Products
+  //   User Principal Name, per-service "<Service> Last Activity Date",
+  //   Assigned Products
   // We parse it into a map: UPN → lastActivityDate (ISO string or null).
   const activityByUpn = await fetchActivityReport(client);
 
@@ -169,24 +176,37 @@ async function fetchActivityReport(
   const activityByUpn = new Map<string, string | null>();
 
   try {
-    // The reports endpoint returns CSV text; we request it as text.
-    const csv: string = await retryAfterDelay(
+    // The reports endpoint returns CSV text. The Graph SDK parses .get()
+    // responses as JSON by default, so a plain .get() returns an object and
+    // csv.split() throws ("csv.split is not a function", caught below, which
+    // silently treated every user as having no activity). Request the raw
+    // Response instead and read it as text.
+    const response = await retryAfterDelay(
       () =>
         client
           .api("/reports/getOffice365ActiveUserDetail(period='D90')")
           .header("Accept", "text/csv")
-          .get() as Promise<string>
+          .responseType(ResponseType.RAW)
+          .get() as Promise<{ text(): Promise<string> }>
     );
+    const csv: string = await response.text();
 
-    // Parse CSV: first row is the header.
+    // Parse CSV: first row is the header. The report has NO single
+    // "Last Activity Date" column; activity is per service (Exchange,
+    // OneDrive, SharePoint, Skype For Business, Yammer, Teams). A user's
+    // last activity is the latest date across those columns, or null when
+    // every column is empty.
     const lines = csv.split(/\r?\n/);
     if (lines.length < 2) return activityByUpn;
 
     const header = parseCsvRow(lines[0]);
     const upnIdx = findColumn(header, "User Principal Name");
-    const actIdx = findColumn(header, "Last Activity Date");
+    const activityIdxs = header
+      .map((h, i) => ({ h, i }))
+      .filter(({ h }) => h.endsWith(" Last Activity Date"))
+      .map(({ i }) => i);
 
-    if (upnIdx < 0 || actIdx < 0) {
+    if (upnIdx < 0 || activityIdxs.length === 0) {
       // Column names may vary by locale/version; log and return empty map.
       console.warn(
         "collectLicences: could not find expected columns in activity report. " +
@@ -197,18 +217,20 @@ async function fetchActivityReport(
 
     for (let i = 1; i < lines.length; i++) {
       const row = parseCsvRow(lines[i]);
-      if (row.length <= Math.max(upnIdx, actIdx)) continue;
+      if (row.length <= upnIdx) continue;
 
       const upn = row[upnIdx]?.trim().toLowerCase();
-      const rawDate = row[actIdx]?.trim();
-
       if (!upn) continue;
 
-      // rawDate is "YYYY-MM-DD" or empty.  Convert to ISO 8601 or null.
-      const lastActivity =
-        rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
-          ? `${rawDate}T00:00:00.000Z`
-          : null;
+      // Each activity date is "YYYY-MM-DD" or empty. Take the latest.
+      let lastActivity: string | null = null;
+      for (const idx of activityIdxs) {
+        const rawDate = row[idx]?.trim();
+        if (rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+          const iso = `${rawDate}T00:00:00.000Z`;
+          if (!lastActivity || iso > lastActivity) lastActivity = iso;
+        }
+      }
 
       activityByUpn.set(upn, lastActivity);
     }
@@ -230,6 +252,17 @@ async function fetchActivityReport(
 function findColumn(header: string[], name: string): number {
   const lower = name.toLowerCase();
   return header.findIndex((h) => h.trim().toLowerCase() === lower);
+}
+
+/**
+ * Extracts the SKU GUID from a /subscribedSkus id, which is composite
+ * ("<tenantId>_<skuGuid>"). assignedLicenses[].skuId is the bare GUID, so
+ * the join in collectLicences must key on this. Returns the input unchanged
+ * when it has no "_".
+ */
+function skuGuid(subscribedSkuId: string): string {
+  const parts = subscribedSkuId.split("_");
+  return parts[parts.length - 1] ?? subscribedSkuId;
 }
 
 /**

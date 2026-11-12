@@ -14,7 +14,7 @@
 import { loadConfig } from "./config.js";
 import { createGraphClient } from "./graph/index.js";
 import { SqliteFindingStore } from "./store/index.js";
-import { CollectorProgressStore, runInventory, fetchPermissions } from "./collector/index.js";
+import { CollectorProgressStore, runInventory, fetchPermissions, detectAnonymousLinks } from "./collector/index.js";
 import { runFlagging } from "./flagger/index.js";
 import { computeScore, countsFromFindings } from "./scorer/index.js";
 
@@ -89,6 +89,80 @@ async function main(): Promise<void> {
       `fetched=${permResult.fetched}, cached=${permResult.cached}, ` +
       `unreadable=${permResult.unreadable}.`
   );
+
+  // 6b. Detect overshared sites by scanning ALL sites for anonymous links.
+  //     This runs after flagging because Graph has no site-level
+  //     sharingCapability field (v1.0 and beta). The permissions fetcher
+  //     already caches results by (siteId, scanTimestamp) so this step
+  //     reuses any permissions calls made in step 6 for sites already
+  //     flagged as overshared-site candidates (currently zero, since
+  //     sharingCapability is null for all sites — see design.md).
+  //
+  //     For each site with linkScope === "anonymous" that is NOT yet in the
+  //     findings store as an overshared-site finding, we create a new
+  //     finding now.  This keeps the flagger and scorer logic unchanged.
+  const anonymousSites = await detectAnonymousLinks({
+    client: graphClient,
+    sites: inventory.sites,
+    dbPath: config.dbPath,
+    scanTimestamp,
+  });
+
+  if (anonymousSites.length > 0) {
+    const { SEVERITY_WEIGHTS } = await import("./flagger/index.js");
+    const oversharedWeight = SEVERITY_WEIGHTS["overshared-site"];
+
+    // Build a set of siteIds already in findings as overshared-site
+    // (created by the standard flagger if sharingCapability had been available).
+    const existingOversharedSubjectIds = new Set(
+      findings
+        .filter((f) => f.type === "overshared-site")
+        .map((f) => f.subjectId)
+    );
+
+    for (const anonSite of anonymousSites) {
+      if (existingOversharedSubjectIds.has(anonSite.siteId)) {
+        // Already a finding from the flagger — patch its linkScope if needed.
+        const existing = findings.find(
+          (f) => f.type === "overshared-site" && f.subjectId === anonSite.siteId
+        );
+        if (existing && existing.numbers.linkScope !== "anonymous") {
+          await store.updateNumbers(existing.id, {
+            ...existing.numbers,
+            linkScope: "anonymous",
+            itemReadable: true,
+          });
+        }
+        continue;
+      }
+
+      // New overshared finding from the anonymous-link scan.
+      const newFinding = await store.insert({
+        type: "overshared-site",
+        subjectId: anonSite.siteId,
+        subjectLabel: anonSite.siteDisplayName,
+        owner: anonSite.owner,
+        numbers: { linkScope: "anonymous", itemReadable: true },
+        severityWeight: oversharedWeight,
+        scanTimestamp,
+      });
+      findings.push(newFinding);
+      console.log(
+        `[overshared] New finding for site ${anonSite.siteDisplayName ?? anonSite.siteId} ` +
+          `(anonymous link detected).`
+      );
+    }
+
+    console.log(
+      `Scan ${scanTimestamp} anonymous-link detection: ` +
+        `${anonymousSites.length} site(s) with anonymous links → ` +
+        `${anonymousSites.length} overshared-site finding(s) added/updated.`
+    );
+  } else {
+    console.log(
+      `Scan ${scanTimestamp} anonymous-link detection: no anonymous links found.`
+    );
+  }
 
   // 7. Compute the Copilot-readiness score (task 5).
   //    Pure function: reads the findings for this scan from the store,

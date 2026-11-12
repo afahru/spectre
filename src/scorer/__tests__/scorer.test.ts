@@ -17,11 +17,11 @@
  *   orphaned-site      2      2        4
  *   stale-guest        5      2       10
  *   idle-licence       4      1        4
- *   cold-storage       3      1        3
+ *   cold-storage       0      1        0
  *                                    ───
- *   totalPenalty                      30
+ *   totalPenalty                      27
  *
- *   score = floor((1 − 30/100) × 100) = floor(70) = 70
+ *   score = floor((1 − 27/100) × 100) = floor(73) = 73
  *
  * All other cases are computed inline in each test.
  */
@@ -38,13 +38,15 @@ import type { GhostType } from "../../store/types.js";
 
 // ── Fixture tenant data ───────────────────────────────────────────────────────
 
-/** The fixture ghost counts, matching the demo seeder (task 6). */
+/** The fixture ghost counts, matching the demo seeder (task 6). Cold-storage
+ *  is 0 by design: the cs fixture sites were created in Nov 2026 and cannot
+ *  be 365 days old until Nov 2027 (see constants.ts). */
 const FIXTURE_COUNTS: GhostCounts = {
   "overshared-site": 3,
   "orphaned-site": 2,
   "stale-guest": 5,
   "idle-licence": 4,
-  "cold-storage": 3,
+  "cold-storage": 0,
 };
 
 const FIXTURE_SCAN_TS = "2026-11-12T00:00:00.000Z";
@@ -177,16 +179,16 @@ describe("computeScore", () => {
   // ── 5.2 fixture tenant ────────────────────────────────────────────────────
 
   describe("fixture tenant (task 5.2)", () => {
-    it("produces score 70 for the fixture ghost counts", () => {
+    it("produces score 73 for the fixture ghost counts", () => {
       const result = computeScore(FIXTURE_COUNTS, FIXTURE_SCAN_TS);
-      // Hand-computed: totalPenalty = 3×3 + 2×2 + 5×2 + 4×1 + 3×1 = 9+4+10+4+3 = 30
-      // score = floor((1 - 30/100) × 100) = 70
-      assert.equal(result.score, 70);
+      // Hand-computed: totalPenalty = 3×3 + 2×2 + 5×2 + 4×1 + 0×1 = 9+4+10+4+0 = 27
+      // score = floor((1 - 27/100) × 100) = 73
+      assert.equal(result.score, 73);
     });
 
-    it("totalPenalty for fixture tenant is 30", () => {
+    it("totalPenalty for fixture tenant is 27", () => {
       const result = computeScore(FIXTURE_COUNTS, FIXTURE_SCAN_TS);
-      assert.equal(result.inputs.totalPenalty, 30);
+      assert.equal(result.inputs.totalPenalty, 27);
     });
 
     it("breakdown matches per-type hand-computed penalties", () => {
@@ -215,10 +217,10 @@ describe("computeScore", () => {
       assert.equal(byType["idle-licence"].weight, 1);
       assert.equal(byType["idle-licence"].penalty, 4);
 
-      // cold-storage: 3 × 1 = 3
-      assert.equal(byType["cold-storage"].count, 3);
+      // cold-storage: 0 × 1 = 0 (0 by design — fixtures too young, see constants.ts)
+      assert.equal(byType["cold-storage"].count, 0);
       assert.equal(byType["cold-storage"].weight, 1);
-      assert.equal(byType["cold-storage"].penalty, 3);
+      assert.equal(byType["cold-storage"].penalty, 0);
     });
 
     it("inputs.counts exactly reflect the values passed in", () => {
@@ -333,9 +335,6 @@ describe("countsFromFindings", () => {
       makeFinding("idle-licence"),
       makeFinding("idle-licence"),
       makeFinding("idle-licence"),
-      makeFinding("cold-storage"),
-      makeFinding("cold-storage"),
-      makeFinding("cold-storage"),
     ];
     const counts = countsFromFindings(findings);
     assert.deepEqual(counts, FIXTURE_COUNTS);
@@ -357,12 +356,9 @@ describe("countsFromFindings", () => {
       makeFinding("idle-licence"),
       makeFinding("idle-licence"),
       makeFinding("idle-licence"),
-      makeFinding("cold-storage"),
-      makeFinding("cold-storage"),
-      makeFinding("cold-storage"),
     ];
     const counts = countsFromFindings(findings);
     const result = computeScore(counts, FIXTURE_SCAN_TS);
-    assert.equal(result.score, 70);
+    assert.equal(result.score, 73);
   });
 });

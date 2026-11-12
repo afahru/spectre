@@ -30,23 +30,40 @@ inventory (sites, users, guests, licences)
   `$select` returns "Could not find a property named sharingCapability on type
   microsoft.graph.site."  All `SiteRecord.sharingCapability` values are
   therefore `null`; the flagger treats `null` as "data unavailable" and
-  produces no overshared-site candidates.  If a future Graph endpoint exposes
-  this property, the enrichment step can be added without changing the flagger.
+  produces no overshared-site candidates from site-level metadata.  Overshared
+  detection is done via the permissions fetcher (see below).
 - `GET /users` (guests filtered by userType), `GET /subscribedSkus`,
   `GET /auditLogs/signIns` (last sign-in per guest, 90-day window).
 - All collectors use delta queries where the endpoint supports them, and
   `$select` discipline everywhere (steering: graph-conventions.md).
 
+### Owner enrichment (staged after inventory)
+
+For group-connected SharePoint team sites, the owner is the first owner of
+the M365 group that backs the site.  The enrichment step runs after the full
+site list is collected (never inside the list loop — graph-conventions
+steering) and uses a two-step lookup:
+
+1. `GET /sites/{siteId}/drive?$select=owner`
+   → `drive.owner.group.id`  (the backing M365 group)
+2. `GET /groups/{groupId}/owners?$select=id,userPrincipalName&$top=1`
+   → first owner UPN
+
+Calls are batched (`OWNER_BATCH_SIZE = 10`) to avoid throttling.
+Sites without a drive (communication sites, root site) return 404 on step 1 —
+`owner` stays `null`.
+Groups with no owners (genuinely orphaned group-connected sites) return an
+empty owners list — `owner` stays `null`.
+Both steps honour Retry-After on 429 via `retryAfterDelay`.
+No owner is ever invented — `null` is the signal for "genuinely orphaned".
+
 ### Flagging heuristics (metadata only)
 
-- Overshared candidate: site with sharing settings allowing anonymous or
-  org-wide links (from site settings, not from per-item permissions).
-  **Currently produces zero candidates**: Graph does not expose
-  `sharingCapability` on the site resource; all site records carry
-  `sharingCapability: null`, so no site is flagged.  The heuristic is
-  correct code — it simply has no data to act on until Graph exposes
-  the property.
-- Orphaned candidate: site with no owner in the site record.
+- Overshared candidate: produced by the permissions fetcher (see below) when
+  `GET /sites/{id}/drive/root/permissions` returns a permission with
+  `link.scope === "anonymous"`.  The site-level `sharingCapability` field is
+  not available from Graph, so this is the only reliable signal.
+- Orphaned candidate: site with no owner after enrichment (`owner === null`).
 - Stale guest: last sign-in 90+ days ago, or no sign-in on record.
 - Idle licence: assigned SKU with no user activity in 90 days.
 - Cold storage: last modified 365+ days ago.

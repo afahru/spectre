@@ -20,10 +20,16 @@
  * orphaned-site        2      2        4
  * stale-guest          5      2       10
  * idle-licence         4      1        4
- * cold-storage         3      1        3
+ * cold-storage         0      1        0
  *                                     ───
- * totalPenalty                        30
- * score = floor((1 − 30/100) × 100) = 70
+ * totalPenalty                        27
+ * score = floor((1 − 27/100) × 100) = 73
+ *
+ * Cold-storage is 0 by design, not by omission: the three cs fixture sites
+ * were created in Nov 2026 and cannot be 365 days old until Nov 2027 (the
+ * SharePoint REST API does not allow back-dating lastModifiedDateTime).
+ * The cold-storage detector itself is proven by the main scan, which finds
+ * the tenant's real cold sites.
  *
  * No number in this file is invented. These counts reflect the Graph objects
  * that the seeder creates — see FIXTURE_NOTES for a detailed mapping.
@@ -45,8 +51,14 @@ export const FIXTURE_STALE_GUEST_COUNT = 5;
 /** Expected number of idle-licence findings after seeding + scanning. */
 export const FIXTURE_IDLE_LICENCE_COUNT = 4;
 
-/** Expected number of cold-storage findings after seeding + scanning. */
-export const FIXTURE_COLD_STORAGE_COUNT = 3;
+/**
+ * Expected number of cold-storage findings after seeding + scanning.
+ * 0 BY DESIGN: the cs fixture sites were created in Nov 2026 and cannot be
+ * 365 days old until Nov 2027; the SharePoint REST API does not allow
+ * back-dating lastModifiedDateTime. The detector is proven by the main scan
+ * against the tenant's real cold sites.
+ */
+export const FIXTURE_COLD_STORAGE_COUNT = 0;
 
 /** All expected finding counts in GhostType-keyed form. */
 export const FIXTURE_COUNTS: Record<GhostType, number> = {
@@ -58,10 +70,10 @@ export const FIXTURE_COUNTS: Record<GhostType, number> = {
 };
 
 /** Expected total penalty (sum of count × weight across all types). */
-export const FIXTURE_TOTAL_PENALTY = 30;
+export const FIXTURE_TOTAL_PENALTY = 27;
 
 /** Expected Copilot-readiness score for this fixture set. */
-export const FIXTURE_SCORE = 70;
+export const FIXTURE_SCORE = 73;
 
 // ── Fixture site specifications ───────────────────────────────────────────────
 
@@ -82,22 +94,17 @@ export const FIXTURE_SITE_PREFIX = "spectre-fixture-";
  *   "overshared" sites: sharingCapability = "ExternalUserAndGuestSharing"
  *     → flagOversharedSites() produces one overshared-site candidate per site.
  *
- *   "orphaned" sites: no owner can be associated (Graph /sites list returns
- *     owner: null for all sites in the collector's current implementation, so
- *     the two non-overshared sites become orphaned candidates).
+ *   "orphaned" sites: no owner can be associated. The scanner enriches owners
+ *     per site (drive owner group) and the seeder assigns the tenant admin as
+ *     owner of the six non-orphaned fixture groups, so only spectre-or1/or2
+ *     stay ownerless and become the orphaned candidates.
  *
  *   "cold" sites: lastModifiedDateTime far enough in the past to exceed the
- *     365-day threshold.  These sites are created and then not modified, so
- *     the seeder relies on the site creation time being recent.  Instead, the
- *     cold-storage sites are flagged by setting the site alias to include
- *     "cold" in its name and by the seeder manually backdating via SharePoint
- *     REST if the tenant allows it, or by documenting the out-of-band step.
- *
- *   Because the SharePoint REST API does not allow an application to
- *   back-date lastModifiedDateTime on a site, the cold-storage fixture sites
- *   are pre-existing sites created on the tenant long before the seeder runs.
- *   The seeder documents the alias names it expects to find; the verifier
- *   validates that the scan discovered them from the tenant.
+ *     365-day threshold. The SharePoint REST API does not allow an application
+ *     to back-date lastModifiedDateTime, and these sites were created in Nov
+ *     2026, so they will only qualify as cold-storage findings after Nov 2027.
+ *     The expected cold-storage count is therefore 0; the detector is proven
+ *     by the main scan against the tenant's real cold sites.
  */
 export const FIXTURE_SITES: Array<{
   /** Short alias used in the site URL (e.g. "spectre-os1"). */
@@ -135,9 +142,9 @@ export const FIXTURE_SITES: Array<{
     sharingCapability: "ExternalUserSharingOnly",
   },
   // ── Orphaned sites (2) ──────────────────────────────────────────────────
-  // These have no owner in Graph (Graph /sites list never returns owner for
-  // SP sites in the standard fields). The two non-overshared, non-cold sites
-  // become the orphaned candidates when the scan runs.
+  // These two intentionally have no owner: the seeder assigns the tenant
+  // admin as owner of the other six fixture groups, so only or1/or2 stay
+  // ownerless and become the orphaned candidates when the scan runs.
   {
     alias: "spectre-or1",
     displayName: "Spectre Fixture Orphaned 1",
@@ -152,10 +159,10 @@ export const FIXTURE_SITES: Array<{
   },
   // ── Cold storage sites (3) ─────────────────────────────────────────────
   // The SharePoint REST API does not allow back-dating lastModifiedDateTime,
-  // so these sites must have been created on the tenant at least 365 days
-  // before the scan runs.  The seeder creates them on first run and documents
-  // that they will only qualify as cold-storage findings after one year.
-  // On the demo day (5 Dec 2026) the threshold is 5 Dec 2025.
+  // so these sites (created Nov 2026) will only qualify as cold-storage
+  // findings after Nov 2027. The expected cold-storage count is 0 until then;
+  // the seeder still creates them so the demo tenant carries the full fixture
+  // set and the detector is exercised on the tenant's real cold sites.
   {
     alias: "spectre-cs1",
     displayName: "Spectre Fixture Cold 1",
@@ -261,18 +268,10 @@ export const FIXTURE_LICENCE_USERS: Array<{
  *   flagOversharedSites() flags these three.
  *
  * orphaned-site (2):
- *   spectre-or1 and spectre-or2 have no sharing capability set and no owner
- *   returned by Graph.  The /sites list endpoint never returns an owner field
- *   in the standard $select, so these sites appear ownerless.
- *   flagOrphanedSites() flags these two (and also the overshared and cold ones
- *   because all sites have owner: null in the collector — see KNOWN LIMITATION).
- *
- *   KNOWN LIMITATION: the collector hardcodes owner: null for all sites.
- *   flagOrphanedSites() therefore flags ALL sites as orphaned candidates.
- *   The verifier will report the actual orphaned count alongside the expected
- *   count of 2 and document this discrepancy for manual review.
- *   Fixing this requires a per-site /sites/{id}?$expand=owner call that is
- *   deferred to a future task.
+ *   spectre-or1 and spectre-or2 intentionally have no owner. The scanner
+ *   enriches owners per site (drive owner group) and the seeder assigns the
+ *   tenant admin as owner of the other six fixture groups, so only these two
+ *   appear ownerless. flagOrphanedSites() flags exactly these two.
  *
  * stale-guest (5):
  *   Five guests (spectre.ghost1..5@outlook.com) are invited but never sign in.
@@ -283,14 +282,15 @@ export const FIXTURE_LICENCE_USERS: Array<{
  *   generate no M365 activity.  The activity report shows no entry for them,
  *   so lastActivityDateTime = null, satisfying the idle condition.
  *
- * cold-storage (3):
+ * cold-storage (0 by design):
  *   spectre-cs1, spectre-cs2, spectre-cs3 must exist on the tenant AND must
  *   not have been modified in the last 365 days.
  *   CONSTRAINT: The SharePoint REST API does not allow backdating
- *   lastModifiedDateTime.  These sites must be created at least one year
- *   before the demo date (by 5 Dec 2025 for a 5 Dec 2026 demo).
- *   The seeder creates them on first run if absent and prints a warning that
- *   they will not qualify as cold-storage findings until they age past 365 days.
+ *   lastModifiedDateTime, and these sites were created in Nov 2026, so they
+ *   will not qualify as cold-storage findings until Nov 2027.
+ *   The seeder creates them on first run if absent and prints a warning.
+ *   The detector is proven by the main scan against the tenant's real
+ *   cold sites.
  */
 export const FIXTURE_NOTES = `
 Fixture seeder — expected findings mapping:
@@ -298,16 +298,11 @@ Fixture seeder — expected findings mapping:
   orphaned-site   : ${FIXTURE_ORPHANED_COUNT}  (spectre-or1, spectre-or2)
   stale-guest     : ${FIXTURE_STALE_GUEST_COUNT}  (spectre.ghost1..5@outlook.com — never signed in)
   idle-licence    : ${FIXTURE_IDLE_LICENCE_COUNT}  (spectre-idle1..4 — no M365 activity)
-  cold-storage    : ${FIXTURE_COLD_STORAGE_COUNT}  (spectre-cs1, spectre-cs2, spectre-cs3 — ≥365 days old)
+  cold-storage    : ${FIXTURE_COLD_STORAGE_COUNT}  (spectre-cs1, spectre-cs2, spectre-cs3 — created Nov 2026, qualify Nov 2027; expected 0)
 
-KNOWN LIMITATION — orphaned-site count:
-  The Graph /sites list endpoint does not return an owner field.
-  collectSites() sets owner: null for all sites.
-  flagOrphanedSites() therefore flags ALL sites, not just the 2 intended ones.
-  Actual orphaned-site count after scan = total_site_count (from fixture: 8).
-  Expected orphaned-site count = ${FIXTURE_ORPHANED_COUNT}.
-  Discrepancy is reported by the verifier (src/seeder/verify.ts).
-  Fix: add per-site owner fetch in collectSites() (deferred to future task).
+  Tenant-wide note: the verifier compares fixture-scoped counts only. The
+  main scan also reports the tenant's real sites; those are genuine findings
+  on the dev tenant, not fixture discrepancies.
 
 Expected score: ${FIXTURE_SCORE}/100  (penalty ${FIXTURE_TOTAL_PENALTY}/100)
 `.trim();

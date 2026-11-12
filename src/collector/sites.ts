@@ -29,6 +29,21 @@
  *   microsoft.graph.site."  All SiteRecords therefore carry
  *   sharingCapability: null, which the flagger treats as "data unavailable"
  *   and skips (narration-rule: unknown stays unknown).
+ *
+ * Owner enrichment (enrichSiteOwners):
+ *   The /sites/getAllSites list endpoint does not return an owner field.
+ *   For group-connected SharePoint team sites the owner is derived from the
+ *   M365 group that backs the site:
+ *     1. GET /sites/{id}/drive?$select=owner
+ *        → drive.owner.group.id  (the backing M365 group for the site)
+ *     2. GET /groups/{groupId}/owners?$select=id,userPrincipalName&$top=1
+ *        → first owner UPN (the person who is an owner of the group)
+ *   Sites without a drive (communication sites, the root site, etc.) return
+ *   404 on step 1 — owner stays null (genuinely ownerless).
+ *   Groups with no owners also return owner: null (genuinely orphaned).
+ *   Both steps use retryAfterDelay (graph-conventions: honour Retry-After).
+ *   Calls are made concurrently in a capped batch (OWNER_BATCH_SIZE) to
+ *   avoid flooding Graph.
  */
 
 import type { Client } from "@microsoft/microsoft-graph-client";
@@ -111,4 +126,163 @@ export async function collectSites(
     }
     url = nextLink;
   }
+}
+
+// ── Owner enrichment ──────────────────────────────────────────────────────────
+
+/**
+ * Maximum number of concurrent owner-enrichment calls.
+ * Graph allows per-app rate limits; keeping this modest avoids early 429s.
+ */
+const OWNER_BATCH_SIZE = 10;
+
+/**
+ * Shape of the drive resource returned by GET /sites/{id}/drive?$select=owner.
+ * For group-connected sites, owner.group.id is the backing M365 group.
+ * For sites without a group (communication sites, root site), owner is absent.
+ */
+interface GraphDriveOwner {
+  id?: string;
+  owner?: {
+    group?: { id?: string } | null;
+    user?: { id?: string; userPrincipalName?: string } | null;
+  } | null;
+}
+
+/**
+ * Shape of the group owners list response.
+ * GET /groups/{id}/owners?$select=id,userPrincipalName&$top=1
+ */
+interface GraphGroupOwnersPage {
+  value: Array<{
+    id?: string;
+    userPrincipalName?: string | null;
+  }>;
+}
+
+/**
+ * Fetches the owner UPN for a single site using the two-step Graph lookup:
+ *   1. GET /sites/{siteId}/drive?$select=owner  → backing group id
+ *   2. GET /groups/{groupId}/owners?$select=id,userPrincipalName&$top=1 → owner UPN
+ *
+ * Returns null when:
+ *   - The site has no drive (communication site, root site) — 404 on step 1.
+ *   - The drive has no group owner (not group-connected).
+ *   - The group has no owners (genuinely orphaned group-connected site).
+ *
+ * Uses retryAfterDelay on both calls (graph-conventions: honour Retry-After).
+ * Never invents an owner — returns null instead (narration-rule steering).
+ */
+async function fetchSiteOwnerUpn(
+  client: Client,
+  siteId: string
+): Promise<string | null> {
+  // Step 1: get the site's drive to find the backing group id.
+  let groupId: string | null = null;
+  try {
+    const drive = await retryAfterDelay(() =>
+      client
+        .api(`/sites/${encodeURIComponent(siteId)}/drive`)
+        .select("id,owner")
+        .get() as Promise<GraphDriveOwner>
+    );
+    groupId = drive.owner?.group?.id ?? null;
+  } catch (err: unknown) {
+    // 404 = no drive (communication site / root site) — owner is unknown.
+    // Any other error is unexpected; we still return null rather than throw.
+    const statusCode =
+      (err as { statusCode?: number }).statusCode ??
+      (err as { code?: number }).code;
+    if (statusCode !== 404) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[sites] Could not fetch drive for site ${siteId}: ${msg} — owner stays null.`
+      );
+    }
+    return null;
+  }
+
+  if (!groupId) {
+    // Drive exists but has no group owner (non-group-connected drive, e.g. personal OneDrive).
+    return null;
+  }
+
+  // Step 2: get the first owner of the backing M365 group.
+  try {
+    const ownersPage = await retryAfterDelay(() =>
+      client
+        .api(`/groups/${groupId}/owners`)
+        .select("id,userPrincipalName")
+        .top(1)
+        .get() as Promise<GraphGroupOwnersPage>
+    );
+    const firstOwner = ownersPage.value?.[0];
+    return firstOwner?.userPrincipalName ?? null;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[sites] Could not fetch owners for group ${groupId} (site ${siteId}): ${msg} — owner stays null.`
+    );
+    return null;
+  }
+}
+
+/**
+ * Enriches a list of SiteRecords with owner UPNs fetched from Graph.
+ *
+ * For each site with owner === null, fetches the owner via the two-step
+ * drive → group-owners lookup and mutates the record in place.
+ *
+ * Graph calls are batched OWNER_BATCH_SIZE at a time (concurrent within a
+ * batch, sequential across batches) to stay within rate limits.
+ *
+ * Sites that return no owner after the lookup remain owner: null — they are
+ * genuinely ownerless and become orphaned-site candidates.
+ *
+ * @param client  Authenticated Graph client (app-only).
+ * @param sites   Site records to enrich in place.
+ */
+export async function enrichSiteOwners(
+  client: Client,
+  sites: SiteRecord[]
+): Promise<void> {
+  // Only enrich sites that don't already have an owner.
+  const toEnrich = sites.filter((s) => s.owner === null);
+
+  if (toEnrich.length === 0) {
+    console.log("[sites] enrichSiteOwners: no sites to enrich.");
+    return;
+  }
+
+  console.log(
+    `[sites] enrichSiteOwners: enriching ${toEnrich.length} site(s) in batches of ${OWNER_BATCH_SIZE}.`
+  );
+
+  let enriched = 0;
+  let stillNull = 0;
+
+  // Process in batches to avoid flooding Graph.
+  for (let i = 0; i < toEnrich.length; i += OWNER_BATCH_SIZE) {
+    const batch = toEnrich.slice(i, i + OWNER_BATCH_SIZE);
+
+    const results = await Promise.all(
+      batch.map((site) => fetchSiteOwnerUpn(client, site.id))
+    );
+
+    for (let j = 0; j < batch.length; j++) {
+      const ownerUpn = results[j];
+      if (ownerUpn !== null) {
+        batch[j].owner = ownerUpn;
+        enriched++;
+      } else {
+        stillNull++;
+      }
+    }
+  }
+
+  console.log(
+    `[sites] enrichSiteOwners: complete — ` +
+      `${enriched} site(s) now have an owner, ` +
+      `${stillNull} site(s) remain ownerless (genuinely orphaned or non-group-connected).`
+  );
 }

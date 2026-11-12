@@ -25,7 +25,7 @@
  *   - Full pipeline console log (same as the main scan engine).
  *   - A side-by-side comparison table: expected (from constants.ts) vs actual
  *     (from the scan findings store).
- *   - A PASS / FAIL per ghost type (PASS = actual >= expected; FAIL otherwise).
+ *   - A PASS / FAIL per ghost type (PASS = actual === expected; FAIL otherwise).
  *   - A summary score comparison.
  *   - Any discrepancies are explained (e.g. the known orphaned-site over-count
  *     caused by the collector always returning owner: null).
@@ -42,10 +42,10 @@
 import { loadConfig } from "../config.js";
 import { createGraphClient } from "../graph/index.js";
 import { SqliteFindingStore } from "../store/index.js";
-import { CollectorProgressStore, runInventory } from "../collector/index.js";
-import { runFlagging } from "../flagger/index.js";
+import { CollectorProgressStore, runInventory, detectAnonymousLinks } from "../collector/index.js";
+import { runFlagging, SEVERITY_WEIGHTS } from "../flagger/index.js";
 import { computeScore, countsFromFindings } from "../scorer/index.js";
-import type { GhostType } from "../store/types.js";
+import type { Finding, GhostType } from "../store/types.js";
 import {
   FIXTURE_COUNTS,
   FIXTURE_SCORE,
@@ -107,9 +107,72 @@ async function main(): Promise<void> {
     `[verify] Flagging complete: ${candidates.length} candidates → ${findings.length} findings.\n`
   );
 
+  // ── 4b. Anonymous-link detection (same step as the main scan, step 6b) ─
+  // The flagger alone can never produce an overshared-site finding because
+  // sharingCapability is not a Graph site property (it is null for every
+  // site). Without this step the verifier always reported overshared 0.
+  const anonymousSites = await detectAnonymousLinks({
+    client: graphClient,
+    sites: inventory.sites,
+    dbPath,
+    scanTimestamp,
+  });
+
+  if (anonymousSites.length > 0) {
+    const oversharedWeight = SEVERITY_WEIGHTS["overshared-site"];
+    const existingOversharedSubjectIds = new Set(
+      findings
+        .filter((f) => f.type === "overshared-site")
+        .map((f) => f.subjectId)
+    );
+
+    for (const anonSite of anonymousSites) {
+      if (existingOversharedSubjectIds.has(anonSite.siteId)) {
+        const existing = findings.find(
+          (f) => f.type === "overshared-site" && f.subjectId === anonSite.siteId
+        );
+        if (existing && existing.numbers.linkScope !== "anonymous") {
+          await store.updateNumbers(existing.id, {
+            ...existing.numbers,
+            linkScope: "anonymous",
+            itemReadable: true,
+          });
+        }
+        continue;
+      }
+
+      const newFinding = await store.insert({
+        type: "overshared-site",
+        subjectId: anonSite.siteId,
+        subjectLabel: anonSite.siteDisplayName,
+        owner: anonSite.owner,
+        numbers: { linkScope: "anonymous", itemReadable: true },
+        severityWeight: oversharedWeight,
+        scanTimestamp,
+      });
+      findings.push(newFinding);
+      console.log(
+        `[verify] Overshared finding for site ${anonSite.siteDisplayName ?? anonSite.siteId} ` +
+          `(anonymous link detected).`
+      );
+    }
+  }
+
+  console.log(
+    `[verify] Anonymous-link detection: ${anonymousSites.length} site(s) with anonymous links.\n`
+  );
+
   // ── 5. Compute score ──────────────────────────────────────────────────
+  // The scan is tenant-wide (it also finds the tenant's real pre-existing
+  // sites), but the verifier compares FIXTURE expectations, so only fixture
+  // findings count here. Tenant-wide findings are reported by the main scan.
   const scanFindings = await store.listByScan(scanTimestamp);
-  const actualCounts = countsFromFindings(scanFindings);
+  const fixtureFindings = scanFindings.filter(isFixtureFinding);
+  console.log(
+    `[verify] Fixture-scoped counts: ${fixtureFindings.length} of ${scanFindings.length} findings ` +
+      `in this scan belong to Spectre fixtures.\n`
+  );
+  const actualCounts = countsFromFindings(fixtureFindings);
   const scoreResult = computeScore(actualCounts, scanTimestamp);
 
   // ── 6. Print comparison table ─────────────────────────────────────────
@@ -193,16 +256,24 @@ async function main(): Promise<void> {
   // ── 9. Known limitations ──────────────────────────────────────────────
   console.log("\n[4] Known limitations:\n");
   console.log(
-    "  orphaned-site: The Graph /sites list endpoint does not return an owner\n" +
-    "  field. collectSites() sets owner: null for every site. flagOrphanedSites()\n" +
-    "  therefore flags ALL sites as orphaned candidates, not just the 2 intended\n" +
-    "  fixture sites. The actual orphaned count equals the total site count in the\n" +
-    "  fixture tenant. Fix: add per-site owner fetch in collectSites() (future task).\n"
+    "  Counts in this report are fixture-scoped: only findings whose subject\n" +
+    "  is a Spectre fixture (Spectre Fixture / Spectre Ghost / Spectre Idle\n" +
+    "  User) are compared against FIXTURE_COUNTS. The tenant's real sites\n" +
+    "  are reported by the main scan, not here.\n"
   );
   console.log(
-    "  cold-storage: Fixture sites spectre-cs1, spectre-cs2, spectre-cs3 must\n" +
-    "  be at least 365 days old to qualify. If the seeder was run recently they\n" +
-    "  will NOT appear as cold-storage findings yet.\n"
+    "  orphaned-site: The Graph /sites list endpoint does not return an owner\n" +
+    "  field, so the scanner enriches owners per site (drive owner group) and\n" +
+    "  the seeder assigns the tenant admin as owner of the six non-orphaned\n" +
+    "  fixture groups. Only spectre-or1/or2 are ownerless by design. If the\n" +
+    "  actual count is higher, the owner assignment or enrichment failed.\n"
+  );
+  console.log(
+    "  cold-storage: Fixture sites spectre-cs1, spectre-cs2, spectre-cs3 were\n" +
+    "  created in Nov 2026 and cannot be 365 days old until Nov 2027, so the\n" +
+    "  expected cold-storage count is 0 by design (see constants.ts). The\n" +
+    "  detector itself is proven by the main scan, which finds the tenant's\n" +
+    "  real cold sites (26 on the last run).\n"
   );
   console.log(
     "  stale-guest: Fixture guests are freshly invited accounts with no sign-in\n" +
@@ -223,6 +294,21 @@ async function main(): Promise<void> {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
+ * True when a finding belongs to a Spectre fixture object, identified by its
+ * display-name prefix (the finding's subjectLabel). Fixture sites are
+ * "Spectre Fixture ...", fixture guests "Spectre Ghost ...", fixture idle
+ * users "Spectre Idle User ...". A null label is never a fixture.
+ */
+function isFixtureFinding(f: Finding): boolean {
+  const label = f.subjectLabel ?? "";
+  return (
+    label.startsWith("Spectre Fixture ") ||
+    label.startsWith("Spectre Ghost ") ||
+    label.startsWith("Spectre Idle User ")
+  );
+}
+
+/**
  * Builds a human-readable note explaining a discrepancy.
  * Returns an empty string when expected === actual.
  */
@@ -232,9 +318,11 @@ function buildNote(type: GhostType, expected: number, actual: number): string {
   if (type === "orphaned-site" && actual > expected) {
     return (
       `Actual (${actual}) > expected (${expected}). ` +
-      `collectSites() sets owner: null for all sites, so every site in the ` +
-      `tenant becomes an orphaned candidate. Expected ${expected} but all ` +
-      `${actual} sites were flagged. See known limitation [4].`
+      `More fixture sites are ownerless than the 2 intended ones. ` +
+      `The seeder assigns the tenant admin as owner of the six non-orphaned ` +
+      `fixture groups; if this count is high, that assignment did not stick ` +
+      `(or the owner enrichment could not resolve the group owners). ` +
+      `See known limitation [4].`
     );
   }
 

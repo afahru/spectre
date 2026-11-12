@@ -21,7 +21,7 @@
 
 import type { Client } from "@microsoft/microsoft-graph-client";
 import { CollectorProgressStore } from "./progress.js";
-import { collectSites } from "./sites.js";
+import { collectSites, enrichSiteOwners } from "./sites.js";
 import { collectGuests } from "./guests.js";
 import { collectLicences, type SkuPriceTable } from "./licences.js";
 import type { SiteRecord, GuestRecord, UserLicenceRecord, SkuRecord } from "./types.js";
@@ -29,8 +29,9 @@ import type { SiteRecord, GuestRecord, UserLicenceRecord, SkuRecord } from "./ty
 export type { SiteRecord, GuestRecord, UserLicenceRecord, SkuRecord };
 export type { SkuPriceTable };
 export { CollectorProgressStore };
-export { fetchPermissions, PermissionsCache } from "./permissions.js";
-export type { FetchPermissionsInput, FetchPermissionsResult, LinkScope } from "./permissions.js";
+export { fetchPermissions, PermissionsCache, detectAnonymousLinks } from "./permissions.js";
+export { enrichSiteOwners } from "./sites.js";
+export type { FetchPermissionsInput, FetchPermissionsResult, LinkScope, DetectAnonymousLinksInput, AnonymousLinkSite } from "./permissions.js";
 
 export interface InventoryInput {
   /** Authenticated Graph client. */
@@ -95,6 +96,15 @@ export async function runInventory(input: InventoryInput): Promise<InventoryResu
       startUrl
     );
   }
+
+  // ── Owner enrichment ──────────────────────────────────────────────────────
+  // After collecting all sites, enrich each site's owner field via the
+  // two-step drive → group-owners lookup (graph-conventions: never call
+  // the owners endpoint inside the list loop without a cache; here we call
+  // it after the full list is complete, in a capped batch).
+  // Sites that have no drive or no group owners remain owner: null —
+  // they are genuinely orphaned.
+  await enrichSiteOwners(client, sites);
 
   // ── Guests ────────────────────────────────────────────────────────────────
   const guests: GuestRecord[] = [];

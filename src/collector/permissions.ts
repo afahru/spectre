@@ -20,13 +20,16 @@
  *   - No value is invented: linkScope is set only from the `link.scope` field
  *     returned by Graph, or left null when Graph does not return one.
  *
- * Graph endpoint used:
+ * Graph endpoints used:
  *   GET /sites/{siteId}/drive/root/permissions
+ *   GET /sites/{siteId}/drive/root/children (+ per-item /permissions)
  *
- * This returns the permissions on the root drive item of the site.  For the
- * purposes of overshared-site detection the root is the canonical "item"
- * because sharing settings at that level propagate to all children by
- * inheritance.
+ * The drive root itself cannot hold a sharing link: Graph returns 400
+ * notSupported ("The operation failed because the object does not support
+ * sharing", inner code objectNotSupported) for createLink on /drive/root,
+ * even when the site's sharing is set to Anyone (verified 2026-11-12).
+ * Links live on files/folders inside the library, so detection checks
+ * the root permissions AND the permissions of each top-level child item.
  *
  * The `link` facet on a permission object has a `scope` field:
  *   "anonymous"    — anyone with the link
@@ -165,25 +168,27 @@ export class PermissionsCache {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
+ * Permissiveness rank for a link scope: anonymous > organization > users.
+ * Unknown scopes rank 0, so they never beat a known scope.
+ */
+function scopeRank(scope: LinkScope | string | null | undefined): number {
+  return scope === "anonymous" ? 3 : scope === "organization" ? 2 : scope === "users" ? 1 : 0;
+}
+
+/**
  * Extracts the strongest (most permissive) link scope from a permissions page.
  *
  * Priority: anonymous > organization > users > null.
  * Returns null when no permission has a `link` facet.
  */
 function extractLinkScope(perms: GraphPermission[]): LinkScope | null {
-  // Rank: higher index = more permissive.
-  const RANK: Record<string, number> = { users: 1, organization: 2, anonymous: 3 };
-
   let best: LinkScope | null = null;
-  let bestRank = 0;
 
   for (const perm of perms) {
     const scope = perm.link?.scope;
     if (!scope) continue;
 
-    const rank = RANK[scope] ?? 0;
-    if (rank > bestRank) {
-      bestRank = rank;
+    if (scopeRank(scope) > scopeRank(best)) {
       best = scope as LinkScope;
     }
   }
@@ -192,20 +197,22 @@ function extractLinkScope(perms: GraphPermission[]): LinkScope | null {
 }
 
 /**
- * Fetches all permissions pages for a single drive-root item,
+ * Fetches all permissions pages for a single drive item,
  * honouring Retry-After on 429 (task 4.3).
+ *
+ * `startUrl` is the relative Graph URL of the first permissions page
+ * (e.g. /sites/{siteId}/drive/root/permissions?... or
+ * /sites/{siteId}/drive/items/{itemId}/permissions?...).
  *
  * Returns the aggregated list of permissions, or throws for non-429 errors.
  */
 async function fetchAllPermissionsPages(
   client: Client,
-  siteId: string
+  startUrl: string
 ): Promise<GraphPermission[]> {
   const allPerms: GraphPermission[] = [];
 
-  // Start from the site's drive root permissions.
-  let url: string | null =
-    `/sites/${encodeURIComponent(siteId)}/drive/root/permissions?$select=id,link,inheritedFrom,roles&$top=200`;
+  let url: string | null = startUrl;
 
   while (url !== null) {
     const page = await retryAfterDelay(() =>
@@ -304,7 +311,10 @@ export async function fetchPermissions(
       let itemReadable = true;
 
       try {
-        const perms = await fetchAllPermissionsPages(client, siteId);
+        const perms = await fetchAllPermissionsPages(
+          client,
+          `/sites/${encodeURIComponent(siteId)}/drive/root/permissions?$select=id,link,inheritedFrom,roles&$top=200`
+        );
         linkScope = extractLinkScope(perms);
 
         console.log(
@@ -343,4 +353,174 @@ export async function fetchPermissions(
   }
 
   return { fetched, cached, unreadable };
+}
+
+// ── All-site anonymous-link detection ───────────────────────────────────────
+
+/**
+ * Input for detectAnonymousLinks.
+ */
+export interface DetectAnonymousLinksInput {
+  /** Authenticated Graph client (app-only). */
+  client: Client;
+  /**
+   * Sites to scan.  Every site is checked; only those with an anonymous-
+   * scoped sharing link are returned.
+   */
+  sites: Array<{ id: string; displayName: string | null; owner: string | null }>;
+  /** SQLite DB path for the permissions cache (same file as the findings store). */
+  dbPath: string;
+  /** Scan run timestamp — used as the second cache dimension. */
+  scanTimestamp: string;
+}
+
+/**
+ * One site that has at least one anonymous sharing link on its drive root
+ * or on a top-level item in its default library.
+ */
+export interface AnonymousLinkSite {
+  siteId: string;
+  siteDisplayName: string | null;
+  owner: string | null;
+  /** The resolved link scope (always "anonymous" in this result set). */
+  linkScope: "anonymous";
+}
+
+/**
+ * Checks every site's drive-root permissions AND the permissions of the
+ * top-level items in its default library for an anonymous sharing link.
+ *
+ * The root check alone is not enough: the drive root cannot hold a sharing
+ * link (createLink on /drive/root returns 400 notSupported), so real links
+ * live on files/folders inside the library. The children check is capped
+ * at the top 50 top-level items per site.
+ *
+ * Uses the same `PermissionsCache` as `fetchPermissions` so results cached
+ * during the overshared-site flagging step are reused here (and vice versa).
+ * The cached scope covers root + top-level children.
+ *
+ * Graph calls: GET /sites/{siteId}/drive/root/permissions (same as task 4),
+ * GET /sites/{siteId}/drive/root/children, then per-child /permissions.
+ * Sites without a drive (404) are skipped silently — they cannot have
+ * anonymous links.
+ *
+ * Returns only sites where the most-permissive link scope is "anonymous".
+ * Never invents a scope — if Graph returns nothing, the site is not returned.
+ *
+ * @param input  Configuration for the detection run.
+ * @returns      List of sites with confirmed anonymous links.
+ */
+export async function detectAnonymousLinks(
+  input: DetectAnonymousLinksInput
+): Promise<AnonymousLinkSite[]> {
+  const { client, sites, dbPath, scanTimestamp } = input;
+  const cache = new PermissionsCache(dbPath);
+
+  const results: AnonymousLinkSite[] = [];
+  let fetched = 0;
+  let cached = 0;
+  let skipped = 0;
+
+  try {
+    console.log(
+      `[permissions] detectAnonymousLinks: checking ${sites.length} site(s) for anonymous links.`
+    );
+
+    for (const site of sites) {
+      const cacheKey = site.id;
+
+      // ── Cache hit ──────────────────────────────────────────────────────
+      const hit = cache.get(cacheKey, scanTimestamp);
+      if (hit !== null) {
+        cached++;
+        if (hit.linkScope === "anonymous") {
+          results.push({
+            siteId: site.id,
+            siteDisplayName: site.displayName,
+            owner: site.owner,
+            linkScope: "anonymous",
+          });
+        }
+        continue;
+      }
+
+      // ── Graph fetch ────────────────────────────────────────────────────
+      let linkScope: LinkScope | null = null;
+      let itemReadable = true;
+
+      try {
+        const rootUrl =
+          `/sites/${encodeURIComponent(site.id)}/drive/root/permissions?$select=id,link,inheritedFrom,roles&$top=200`;
+        const perms = await fetchAllPermissionsPages(client, rootUrl);
+        linkScope = extractLinkScope(perms);
+
+        // The drive root cannot hold a sharing link (see header comment),
+        // so also check the top-level items in the library.
+        let childrenChecked = 0;
+        try {
+          const childrenPage = await client
+            .api(`/sites/${encodeURIComponent(site.id)}/drive/root/children?$select=id,name&$top=50`)
+            .get() as { value: Array<{ id: string; name?: string }> };
+          for (const child of childrenPage.value ?? []) {
+            childrenChecked++;
+            const childPerms = await fetchAllPermissionsPages(
+              client,
+              `/sites/${encodeURIComponent(site.id)}/drive/items/${child.id}/permissions?$select=id,link,inheritedFrom,roles&$top=200`
+            );
+            const childScope = extractLinkScope(childPerms);
+            if (scopeRank(childScope) > scopeRank(linkScope)) {
+              linkScope = childScope;
+            }
+          }
+        } catch (childErr: unknown) {
+          // A site whose children list is unreadable still keeps its
+          // root result; the miss is logged, not fatal.
+          const msg = childErr instanceof Error ? childErr.message : String(childErr);
+          console.warn(
+            `[permissions] site ${site.id}: could not list root children — ${msg}. Root scope kept.`
+          );
+        }
+
+        console.log(
+          `[permissions] site ${site.id} (${site.displayName ?? "unknown"}): ` +
+            `${perms.length} root permission(s), ${childrenChecked} child item(s) checked, scope=${linkScope ?? "none"}.`
+        );
+        fetched++;
+      } catch (err: unknown) {
+        // 404 = no drive (communication site, root site) — not an error.
+        // Other non-429 errors: record as unreadable and continue.
+        const statusCode = (err as { statusCode?: number }).statusCode;
+        if (statusCode !== 404) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `[permissions] site ${site.id}: unreadable — ${msg}. Skipping.`
+          );
+        }
+        itemReadable = false;
+        skipped++;
+      }
+
+      // Store in cache.
+      cache.set(cacheKey, scanTimestamp, linkScope, itemReadable);
+
+      if (linkScope === "anonymous") {
+        results.push({
+          siteId: site.id,
+          siteDisplayName: site.displayName,
+          owner: site.owner,
+          linkScope: "anonymous",
+        });
+      }
+    }
+
+    console.log(
+      `[permissions] detectAnonymousLinks done — ` +
+        `fetched: ${fetched}, cached: ${cached}, skipped: ${skipped}, ` +
+        `anonymous-link sites: ${results.length}.`
+    );
+  } finally {
+    cache.close();
+  }
+
+  return results;
 }

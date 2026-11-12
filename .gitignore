@@ -6,3 +6,5 @@ dist/
 # demo database and scan-cursor files produced at runtime
 spectre.db
 *.cursor.json
+spectre-verify.db
+.env

@@ -23,8 +23,15 @@ inventory (sites, users, guests, licences)
 
 ### Inventory collector
 
-- `GET /sites?$select=id,displayName,webUrl,createdDateTime,lastModifiedDateTime`
-  paged through the full tenant.
+- `GET /sites/getAllSites?$select=id,displayName,webUrl,createdDateTime,lastModifiedDateTime`
+  paged through the full tenant.  `sharingCapability` is **not** in this
+  `$select` and is **not fetched separately**: Microsoft Graph (v1.0 and beta)
+  does not expose `sharingCapability` on the site resource — including it in
+  `$select` returns "Could not find a property named sharingCapability on type
+  microsoft.graph.site."  All `SiteRecord.sharingCapability` values are
+  therefore `null`; the flagger treats `null` as "data unavailable" and
+  produces no overshared-site candidates.  If a future Graph endpoint exposes
+  this property, the enrichment step can be added without changing the flagger.
 - `GET /users` (guests filtered by userType), `GET /subscribedSkus`,
   `GET /auditLogs/signIns` (last sign-in per guest, 90-day window).
 - All collectors use delta queries where the endpoint supports them, and
@@ -34,6 +41,11 @@ inventory (sites, users, guests, licences)
 
 - Overshared candidate: site with sharing settings allowing anonymous or
   org-wide links (from site settings, not from per-item permissions).
+  **Currently produces zero candidates**: Graph does not expose
+  `sharingCapability` on the site resource; all site records carry
+  `sharingCapability: null`, so no site is flagged.  The heuristic is
+  correct code — it simply has no data to act on until Graph exposes
+  the property.
 - Orphaned candidate: site with no owner in the site record.
 - Stale guest: last sign-in 90+ days ago, or no sign-in on record.
 - Idle licence: assigned SKU with no user activity in 90 days.

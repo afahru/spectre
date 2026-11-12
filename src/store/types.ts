@@ -59,6 +59,16 @@ export interface FindingNumbers {
    * Never invented — set only from the actual Graph call result.
    */
   itemReadable?: boolean;
+  /**
+   * Graph ids of the anonymous link, as returned by the permissions call
+   * during the scan. Needed to revoke it. Absent when the scan did not
+   * record them; never invented.
+   */
+  anonymousLink?: {
+    driveId: string;
+    itemId: string;
+    permissionId: string;
+  } | null;
 }
 
 /**

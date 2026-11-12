@@ -1,3 +1,4 @@
 export * from "./types.js";
 export * from "./audit.js";
 export * from "./dispatcher.js";
+export * from "./revoke-link.js";

@@ -31,7 +31,7 @@ ghosts, zombies and vampires as finding types, exorcised one by one.
 - React admin console (or SPFx web part — author's home turf).
 - Teams Adaptive Cards for the owner attestation loop.
 - Entra app registration in the author's M365 developer tenant
-  (admin: ozi@opzsi.com) with admin consent; demo runs on that tenant.
+  with admin consent; demo runs on that tenant.
 - Kiro: specs, steering, agent hooks, Graph MCP, Kiro Crew for the
   plain-English narration drafts.
 

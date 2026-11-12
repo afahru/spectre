@@ -223,7 +223,7 @@ async function resolveTenantDomain(
  *
  * Note: Setting sharingCapability requires the SharePoint Admin REST endpoint
  * (/_api/site) which uses a different auth flow (delegated token or PnP).
- * For the demo tenant (admin: ozi@opzsi.com), the seeder uses
+ * For the demo tenant, the seeder uses
  * Graph PATCH on the site drive root to set sharing settings indirectly.
  *
  * Practically: the seeder creates the groups/sites and prints the SharePoint

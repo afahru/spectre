@@ -10,7 +10,7 @@
   unknown; ownerless stays ownerless.
 - `/.kiro` is committed, never gitignored.
 - Do NOT reuse the SPFx oversharing-readiness sample as this project.
-- Demo runs on the author's M365 developer tenant (admin ozi@opzsi.com).
+- Demo runs on the author's M365 developer tenant.
 - All user-facing copy in the product is English; the demo video narration
   can be English with the haunted-house theme.
 - Root cause before workaround; every fix report states root cause and blast

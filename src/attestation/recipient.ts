@@ -8,7 +8,7 @@
 
 import type { Finding } from "../store/types.js";
 
-export type ExceptionReason = "ownerless" | "owner unreachable";
+export type ExceptionReason = "ownerless" | "owner unreachable" | "no response";
 
 export type Recipient =
   | { kind: "owner"; upn: string }

@@ -17,12 +17,13 @@ export interface AttestationPostback {
   action: AttestationAction;
 }
 
-export function buildCard(f: Finding) {
+/** Task 4.1: the nudge re-sends the same card, marked as a reminder. */
+export function buildCard(f: Finding, opts: { reminder?: boolean } = {}) {
   return {
     type: "AdaptiveCard",
     $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
     version: "1.5",
-    body: [{ type: "TextBlock", text: narrate(f), wrap: true }],
+    body: [{ type: "TextBlock", text: (opts.reminder ? "Reminder: " : "") + narrate(f), wrap: true }],
     actions: ACTIONS.map((action) => ({
       type: "Action.Submit",
       title: action,

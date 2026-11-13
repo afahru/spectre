@@ -6,14 +6,16 @@
  *       a reminder). At most two messages per finding (initial + nudge).
  *   4.2 Still no answer 7 days after the nudge: admin exceptions queue,
  *       reason "no response".
- * A finding with a recorded decision is never nudged. A finding with no
+ * A ghost with an active decision is never nudged; sends and queue membership
+ * are looked up by ghost, so the clock follows it across re-scans. A finding with no
  * recorded send is left to card delivery (task 2.2). A failed nudge goes to
  * the queue with the error attached and is not retried.
  */
 
 import type { FindingStore } from "../store/FindingStore.js";
+import type { GhostType } from "../store/types.js";
 import { buildCard } from "./card.js";
-import type { DecisionStore } from "./decision.js";
+import { isDecisionActive, type DecisionStore } from "./decision.js";
 import type { ExceptionReason } from "./recipient.js";
 
 /** Requirements 3.1 and 3.2. */
@@ -36,12 +38,16 @@ export interface SendRecord {
 export interface SendLog {
   /** Sends for a finding, in any order. */
   list(findingId: string): Promise<SendRecord[]>;
+  /** Sends for a ghost under any finding row, in any order. */
+  listBySubject(type: GhostType, subjectId: string): Promise<SendRecord[]>;
   add(record: SendRecord): Promise<void>;
 }
 
 /** Admin exceptions queue (visible in the admin console). */
 export interface AdminQueue {
   has(findingId: string): Promise<boolean>;
+  /** True when the ghost is queued under any finding row. */
+  hasBySubject(type: GhostType, subjectId: string): Promise<boolean>;
   enqueue(entry: { findingId: string; reason: ExceptionReason; error?: string }): Promise<void>;
 }
 
@@ -67,10 +73,11 @@ export async function runNudgeCheck(deps: NudgeDeps): Promise<NudgeSummary> {
 
   for (const f of await deps.findings.listOpen()) {
     if (!f.owner) continue; // ownerless findings are routed by recipient resolution
-    if (await deps.decisions.get(f.id)) continue; // answered: never nudge
-    if (await deps.queue.has(f.id)) continue; // already escalated
+    // answered (Keep only while it suppresses): never nudge
+    if (isDecisionActive(await deps.decisions.getBySubject(f.type, f.subjectId), at)) continue;
+    if (await deps.queue.hasBySubject(f.type, f.subjectId)) continue; // already escalated
 
-    const sends = (await deps.sends.list(f.id)).sort(
+    const sends = (await deps.sends.listBySubject(f.type, f.subjectId)).sort(
       (a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt),
     );
     if (sends.length === 0) continue; // not yet sent

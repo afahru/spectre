@@ -8,4 +8,5 @@
 
 export type { FindingStore } from "./FindingStore.js";
 export type { Finding, FindingNumbers, FindingStatus, GhostType, NewFinding } from "./types.js";
+export { supersedePreviousFindings } from "./supersede.js";
 export { SqliteFindingStore } from "./SqliteFindingStore.js";

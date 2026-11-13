@@ -12,7 +12,9 @@
     "test:scorer": "tsc && node --test dist/scorer/__tests__/scorer.test.js",
     "seed": "ts-node src/seeder/index.ts",
     "verify": "ts-node src/seeder/verify.ts",
-    "bot": "ts-node src/attestation/server.ts"
+    "bot": "ts-node src/attestation/server.ts",
+    "console": "ts-node src/console/server.ts",
+    "web:build": "npm --prefix web install && npm --prefix web run build"
   },
   "dependencies": {
     "@azure/identity": "4.4.1",

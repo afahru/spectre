@@ -26,6 +26,18 @@ interface AuditRow {
   restore_path: string | null;
 }
 
+const toEntry = (r: AuditRow): AuditEntry => ({
+  id: r.id,
+  findingId: r.finding_id,
+  action: r.action as RemediationAction,
+  target: r.target,
+  owner: r.owner,
+  timestamp: r.timestamp,
+  result: r.result as AuditResult,
+  error: r.error,
+  restorePath: r.restore_path,
+});
+
 export class SqliteAuditLog implements AuditLog {
   private readonly db: Database.Database;
 
@@ -83,17 +95,15 @@ export class SqliteAuditLog implements AuditLog {
         `SELECT * FROM audit_log WHERE finding_id = ? ORDER BY timestamp ASC, rowid ASC`
       )
       .all(findingId) as AuditRow[];
-    return rows.map((r) => ({
-      id: r.id,
-      findingId: r.finding_id,
-      action: r.action as RemediationAction,
-      target: r.target,
-      owner: r.owner,
-      timestamp: r.timestamp,
-      result: r.result as AuditResult,
-      error: r.error,
-      restorePath: r.restore_path,
-    }));
+    return rows.map(toEntry);
+  }
+
+  /** Every entry, newest first. Read-only; used by the admin console. */
+  async listAll(): Promise<AuditEntry[]> {
+    const rows = this.db
+      .prepare(`SELECT * FROM audit_log ORDER BY timestamp DESC, rowid DESC`)
+      .all() as AuditRow[];
+    return rows.map(toEntry);
   }
 
   close(): void {

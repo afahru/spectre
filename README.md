@@ -69,3 +69,12 @@ ghosts, zombies and vampires as finding types, exorcised one by one.
 - Week 1: specs + scan engine + fixture tenant seeding.
 - Week 2: attestation loop + remediation actions + admin console.
 - Week 3: demo video (<3 min), README, submission form, Best Startup fields.
+
+## Admin console
+
+`npm run web:build` builds the React app (Fluent UI v9) into `web/dist`, then
+`npm run console` serves it with the read API (`GET /score`, `/findings`,
+`/exceptions`, `/audit`) on `http://127.0.0.1:3979`. The only write is
+`POST /exceptions/{id}/decide`, which goes through the remediation dispatcher.
+Set `ADMIN_UPN` to record the deciding admin; without it decisions return 503.
+The service has no sign-in: keep it on localhost or behind your access proxy.

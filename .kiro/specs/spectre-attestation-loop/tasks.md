@@ -22,13 +22,13 @@
     postbacks
     - _Design: Card delivery_
 
-- [ ] 3. Decision handling
-  - [ ] 3.1 Record the decision (finding id, owner, action, timestamp)
+- [x] 3. Decision handling
+  - [x] 3.1 Record the decision (finding id, owner, action, timestamp)
     idempotently
     - _Requirements: 2.1_
-  - [ ] 3.2 Keep: close as accepted risk, suppress re-ask for 30 days
+  - [x] 3.2 Keep: close as accepted risk, suppress re-ask for 30 days
     - _Requirements: 2.3_
-  - [ ] 3.3 Restrict / Archive: hand to remediation, never execute in
+  - [x] 3.3 Restrict / Archive: hand to remediation, never execute in
     the loop
     - _Requirements: 2.2_
 

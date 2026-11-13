@@ -120,7 +120,12 @@ if (require.main === module) {
     findings,
     audit,
     decisions: new SqliteDecisionStore(config.dbPath),
-    queued: () => new SqliteAdminQueue(config.dbPath).list(),
+    queued: async () =>
+      (await new SqliteAdminQueue(config.dbPath).list()).map((e) => ({
+        findingId: e.findingId,
+        reason: e.reason,
+        error: e.error ?? undefined,
+      })),
     dispatch: (d) => dispatcher.dispatch(d),
     adminUpn: process.env["ADMIN_UPN"] || null,
   });

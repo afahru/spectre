@@ -21,7 +21,7 @@ import type { ConversationStore } from "./delivery.js";
 import type { DecisionOutcome } from "./decision.js";
 
 export const MESSAGES_PATH = "/api/messages";
-const OPENID_CONFIG = "https://login.botframework.com/v1/.well-known/openidconfig";
+const OPENID_CONFIG = "https://login.botframework.com/v1/.well-known/openidconfiguration";
 const BOT_ISSUER = "https://api.botframework.com";
 
 interface Jwk extends JsonWebKey {
@@ -107,9 +107,12 @@ export function createMessagingServer(deps: EndpointDeps): Server {
   return createServer(async (req, res) => {
     const end = (code: number) => res.writeHead(code).end();
     if (req.method !== "POST" || req.url !== MESSAGES_PATH) return end(404);
+    console.log(`attestation: POST ${MESSAGES_PATH} auth=${req.headers.authorization ? "present" : "missing"}`);
     try {
       const activity = JSON.parse(await readBody(req)) as Activity;
-      if (!(await isAuthentic(req.headers.authorization, deps.appId, activity.serviceUrl))) return end(401);
+      const ok = await isAuthentic(req.headers.authorization, deps.appId, activity.serviceUrl);
+      console.log(`attestation: auth=${ok} type=${activity.type} serviceUrl=${activity.serviceUrl}`);
+      if (!ok) return end(401);
 
       // Learn the owner's 1:1 conversation from any activity they send (install, hello, tap).
       const aad = activity.from?.aadObjectId;
@@ -117,6 +120,9 @@ export function createMessagingServer(deps: EndpointDeps): Server {
         const upn = await deps.upnOf(aad);
         if (upn) {
           deps.conversations.put({ upn, serviceUrl: activity.serviceUrl, conversationId: activity.conversation.id });
+          console.log(`attestation: learned conversation upn=${upn} conv=${activity.conversation.id}`);
+        } else {
+          console.log(`attestation: upnOf returned null for aad=${aad}`);
         }
       }
 

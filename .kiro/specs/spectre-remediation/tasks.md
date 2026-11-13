@@ -30,7 +30,7 @@
     - _Requirements: 3.1, 3.2_
 
 - [ ] 5. Tests and live verification
-  - [ ] 5.1 Unit-test the dispatcher and audit entries
+  - [x] 5.1 Unit-test the dispatcher and audit entries
     - _Design: Testing strategy_
   - [ ] 5.2 Live-verify on the fixture tenant (revoke one link, delete
     one guest, archive one cold site), then re-scan

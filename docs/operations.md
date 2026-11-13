@@ -327,8 +327,8 @@ plan them as follow-up work.
    Archive decisions are recorded and then refused. Register the
    handlers (`createRevokeLinkHandler`, `createExpireGuestHandler`,
    `createArchiveSiteHandler`) before relying on remediation.
-4. **No persistent admin queue.** The `AdminQueue` interface exists but
-   no implementation does. The console derives its exceptions view from
+4. **Admin queue not surfaced.** `SqliteAdminQueue` persists entries in
+   `attestation_admin_queue`, but the console derives its exceptions view from
    ownerless findings only; `owner unreachable` and `no response` queue
    entries are not surfaced.
 5. **No score trend storage.** The scorer returns each result with its

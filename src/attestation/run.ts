@@ -8,6 +8,7 @@
  */
 
 import { loadConfig } from "../config.js";
+import { createGraphClient } from "../graph/client.js";
 import { SqliteFindingStore } from "../store/index.js";
 import { SqliteDecisionStore } from "./SqliteDecisionStore.js";
 import { SqliteAdminQueue } from "./SqliteAdminQueue.js";
@@ -17,6 +18,9 @@ import { runNudgeCheck } from "./nudge.js";
 async function main(): Promise<void> {
   const config = loadConfig();
   const bot = loadBotConfig(config.tenantId);
+  // Graph client is created per the runner spec; delivery and nudge do not call Graph yet.
+  const graph = createGraphClient(config);
+  void graph;
 
   const findings = new SqliteFindingStore(config.dbPath);
   const decisions = new SqliteDecisionStore(config.dbPath);

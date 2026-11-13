@@ -11,7 +11,8 @@
     "test": "tsc && node --test dist/scorer/__tests__/scorer.test.js dist/remediation/__tests__/remediation.test.js",
     "test:scorer": "tsc && node --test dist/scorer/__tests__/scorer.test.js",
     "seed": "ts-node src/seeder/index.ts",
-    "verify": "ts-node src/seeder/verify.ts"
+    "verify": "ts-node src/seeder/verify.ts",
+    "bot": "ts-node src/attestation/server.ts"
   },
   "dependencies": {
     "@azure/identity": "4.4.1",

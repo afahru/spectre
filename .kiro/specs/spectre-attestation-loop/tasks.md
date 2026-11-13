@@ -32,11 +32,11 @@
     the loop
     - _Requirements: 2.2_
 
-- [ ] 4. Nudge and escalation
-  - [ ] 4.1 Daily scheduler: 7 days with no answer means one nudge, at
+- [x] 4. Nudge and escalation
+  - [x] 4.1 Daily scheduler: 7 days with no answer means one nudge, at
     most two messages per finding
     - _Requirements: 3.1_
-  - [ ] 4.2 7 days after the nudge with no answer means the admin
+  - [x] 4.2 7 days after the nudge with no answer means the admin
     exceptions queue
     - _Requirements: 3.2_
 

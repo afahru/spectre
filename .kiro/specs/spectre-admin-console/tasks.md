@@ -32,8 +32,8 @@
     actions shown as failed, never as fixed
     - _Requirements: 4.1, 4.2, 4.3_
 
-- [ ] 5. Tests and demo wiring
-  - [ ] 5.1 Unit-test the read API and the decide endpoint
+- [x] 5. Tests and demo wiring
+  - [x] 5.1 Unit-test the read API and the decide endpoint
     - _Design: Testing strategy_
   - [x] 5.2 Wire the demo: fixture tenant findings, tenant-wide score
     0/100, and fixture score 73/100 shown side by side, labelled

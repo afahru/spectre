@@ -27,9 +27,19 @@ export interface SiteRecord {
   lastModifiedDateTime: string | null;
   /**
    * UPN or object-id of the site owner returned by Graph.
-   * null means Graph returned no owner — the site is a candidate orphan.
+   * null means no owner UPN is known. It does NOT by itself mean orphaned;
+   * see ownerStatus.
    */
   owner: string | null;
+  /**
+   * Why owner is or is not set:
+   *   - 'owned'          group-connected, the group has an owner.
+   *   - 'orphaned'       group-connected, the backing group has zero owners.
+   *   - 'not-applicable' no drive or no backing group, so no owner applies.
+   *   - 'unknown'        enrichment failed or has not run yet.
+   * Only 'orphaned' makes a site an orphaned-site candidate.
+   */
+  ownerStatus: 'owned' | 'orphaned' | 'not-applicable' | 'unknown';
   /**
    * SharePoint sharing capability at the site level, as returned by Graph.
    * Possible values from Graph: "disabled", "existingExternalUserSharingOnly",

@@ -23,7 +23,7 @@ Spectre calls each exposure type a ghost. The five are:
 | Ghost | What it means | Why it matters |
 |---|---|---|
 | **Overshared site** | A site can be opened by anyone with the link, even people outside your company. No sign-in is needed. | Anyone who gets the link can read the content. Copilot can surface it too. |
-| **Orphaned site** | A site has no owner. Nobody is responsible for what happens to it. | No one decides who can see it, and no one cleans it up. |
+| **Orphaned site** | A site is tied to a Microsoft 365 group, but that group has no owners. Nobody is responsible for what happens to it. | No one decides who can see it, and no one cleans it up. |
 | **Stale guest** | A guest user still has access but has not signed in for 90 days or more, or has never signed in. | Dormant external access that nobody is watching. |
 | **Idle licence** | A licence is assigned to someone who has not used Microsoft 365 in 90 days. | You are paying for a licence nobody uses. The card states the monthly cost when it is known. |
 | **Cold storage** | A site has not been changed in a year or more. | Old content keeps costing storage. Archiving it stops the cost. |

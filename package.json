@@ -8,7 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
-    "test": "tsc && node --test dist/scorer/__tests__/scorer.test.js dist/remediation/__tests__/remediation.test.js dist/attestation/__tests__/attestation.test.js",
+    "test": "tsc && node --test dist/scorer/__tests__/scorer.test.js dist/remediation/__tests__/remediation.test.js dist/attestation/__tests__/attestation.test.js dist/flagger/__tests__/sites.test.js",
     "test:scorer": "tsc && node --test dist/scorer/__tests__/scorer.test.js",
     "seed": "ts-node src/seeder/index.ts",
     "verify": "ts-node src/seeder/verify.ts",

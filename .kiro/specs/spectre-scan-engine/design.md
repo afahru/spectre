@@ -50,12 +50,19 @@ steering) and uses a two-step lookup:
    → first owner UPN
 
 Calls are batched (`OWNER_BATCH_SIZE = 10`) to avoid throttling.
-Sites without a drive (communication sites, root site) return 404 on step 1 —
-`owner` stays `null`.
-Groups with no owners (genuinely orphaned group-connected sites) return an
-empty owners list — `owner` stays `null`.
+Each site gets an `ownerStatus` alongside `owner`:
+
+| `ownerStatus` | Meaning | `owner` |
+|---|---|---|
+| `owned` | Group-connected, the group has at least one owner | first owner UPN |
+| `orphaned` | Group-connected, the backing group has zero owners | `null` |
+| `not-applicable` | No drive (404, e.g. communication site, root site) or a drive with no backing group (e.g. personal drive); no owner applies | `null` |
+| `unknown` | Enrichment failed (fetch error) or never ran | `null` |
+
 Both steps honour Retry-After on 429 via `retryAfterDelay`.
-No owner is ever invented — `null` is the signal for "genuinely orphaned".
+No owner is ever invented. `owner === null` alone is NOT a signal for
+"orphaned"; only `ownerStatus === "orphaned"` is. Unknown stays unknown.
+Collection initialises every site as `unknown`; enrichment targets `unknown`.
 
 ### Flagging heuristics (metadata only)
 
@@ -63,7 +70,8 @@ No owner is ever invented — `null` is the signal for "genuinely orphaned".
   `GET /sites/{id}/drive/root/permissions` returns a permission with
   `link.scope === "anonymous"`.  The site-level `sharingCapability` field is
   not available from Graph, so this is the only reliable signal.
-- Orphaned candidate: site with no owner after enrichment (`owner === null`).
+- Orphaned candidate: group-connected site whose backing group has zero owners
+  (`ownerStatus === "orphaned"`). `not-applicable` and `unknown` are never flagged.
 - Stale guest: last sign-in 90+ days ago, or no sign-in on record.
 - Idle licence: assigned SKU with no user activity in 90 days.
 - Cold storage: last modified 365+ days ago.

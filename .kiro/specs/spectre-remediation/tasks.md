@@ -32,6 +32,6 @@
 - [ ] 5. Tests and live verification
   - [x] 5.1 Unit-test the dispatcher and audit entries
     - _Design: Testing strategy_
-  - [ ] 5.2 Live-verify on the fixture tenant (revoke one link, delete
+  - [x] 5.2 Live-verify on the fixture tenant (revoke one link, delete
     one guest, archive one cold site), then re-scan
     - _Design: Testing strategy_

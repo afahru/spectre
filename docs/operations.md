@@ -78,6 +78,33 @@ Limits, enforced in code:
 - A failed nudge goes to the admin queue with reason `owner unreachable`
   and the error attached, and is not retried.
 
+### 1.5 Scheduled runner
+
+`npm run attest` (`node dist/attestation/run.js`, build first) runs card
+delivery and then the nudge check once. It needs `TENANT_ID`, `CLIENT_ID`,
+`CLIENT_SECRET`, `BOT_APP_ID`, `BOT_APP_SECRET` and optionally `DB_PATH`.
+Schedule it daily, for example at 09:00 local time:
+
+```
+0 9 * * * cd /path/to/spectre && npm run attest >> attest.log 2>&1
+```
+
+It is safe to run more than once a day: findings already sent are skipped,
+and the nudge rules (7 days, 2 messages, escalation) are unchanged. It
+prints one JSON line, for example
+`{"sent":3,"nudged":1,"escalated":0,"queued":2,"skipped":10}`:
+
+- `sent`: initial cards sent in this run.
+- `nudged`: reminders sent in this run.
+- `escalated`: findings moved to the admin queue for "no response".
+- `queued`: findings sent to the admin queue by delivery (ownerless, owner
+  unreachable, or a failed send).
+- `skipped`: findings delivery left alone (already sent, decided or queued).
+
+The exit code is 0 on success and non-zero only on a startup failure such
+as missing environment variables. Queue entries are stored in the
+`attestation_admin_queue` table of the same database file.
+
 ## 2. Monitoring
 
 ### 2.1 What to check
@@ -300,8 +327,8 @@ plan them as follow-up work.
    Archive decisions are recorded and then refused. Register the
    handlers (`createRevokeLinkHandler`, `createExpireGuestHandler`,
    `createArchiveSiteHandler`) before relying on remediation.
-4. **No persistent admin queue.** The `AdminQueue` interface exists but
-   no implementation does. The console derives its exceptions view from
+4. **Admin queue not surfaced.** `SqliteAdminQueue` persists entries in
+   `attestation_admin_queue`, but the console derives its exceptions view from
    ownerless findings only; `owner unreachable` and `no response` queue
    entries are not surfaced.
 5. **No score trend storage.** The scorer returns each result with its

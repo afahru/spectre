@@ -19,9 +19,10 @@
  *     so the finding narration can quote it exactly (narration-rule steering).
  *
  *   OrphanedSiteCandidate
- *     A site for which Graph returned no owner (owner === null in SiteRecord).
- *     Requirement 1.2: "sites with no owner recorded → flag as orphan candidate,
- *     never invent an owner."
+ *     A group-connected site whose backing group has zero owners
+ *     (ownerStatus === 'orphaned'). Sites with no drive or no backing group
+ *     ('not-applicable') and sites whose lookup failed ('unknown') are not
+ *     flagged. Never invent an owner.
  *
  * Requirements traced:
  *   - Req 1.2: orphaned candidate from no-owner metadata.
@@ -88,9 +89,9 @@ export function flagOversharedSites(
 /**
  * Returns orphaned-site candidates from site metadata.
  *
- * A site is flagged when Graph returned no owner (owner === null).
- * Requirement 1.2: "sites with no owner recorded → flag as candidate orphaned
- * site, record the absence explicitly, never inventing an owner."
+ * A site is flagged only when ownerStatus === 'orphaned': group-connected and
+ * the backing group has zero owners. owner === null alone is not enough.
+ * Requirement 1.2: record the absence explicitly, never invent an owner.
  *
  * @param sites  Full site list from the inventory collector.
  */
@@ -100,7 +101,7 @@ export function flagOrphanedSites(
   const candidates: OrphanedSiteCandidate[] = [];
 
   for (const site of sites) {
-    if (site.owner === null) {
+    if (site.ownerStatus === "orphaned") {
       candidates.push({
         type: "orphaned-site",
         siteId: site.id,

@@ -22,8 +22,12 @@ to work from.
 1. WHEN the scan runs, THE System SHALL list all SharePoint sites via the
    Graph `/sites` endpoint with `$select` limited to id, displayName,
    webUrl, createdDateTime, lastModifiedDateTime.
-2. WHEN a site has no owner recorded, THE System SHALL flag it as a candidate
-   orphaned site and record the absence explicitly, never inventing an owner.
+2. WHEN a site is group-connected and its backing Microsoft 365 group has zero
+   owners, THE System SHALL flag it as a candidate orphaned site and record the
+   absence explicitly, never inventing an owner. A site with no drive or no
+   backing group has no owner that applies (not-applicable) and SHALL NOT be
+   flagged. A site whose owner lookup failed or never ran is unknown and SHALL
+   NOT be flagged; unknown stays unknown.
 3. WHEN the inventory completes, THE System SHALL persist the site list with a
    scan timestamp so a later run can diff against it.
 

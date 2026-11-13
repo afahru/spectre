@@ -13,7 +13,7 @@
 
 import { loadConfig } from "./config.js";
 import { createGraphClient } from "./graph/index.js";
-import { SqliteFindingStore } from "./store/index.js";
+import { SqliteFindingStore, supersedePreviousFindings } from "./store/index.js";
 import { CollectorProgressStore, runInventory, fetchPermissions, detectAnonymousLinks } from "./collector/index.js";
 import { runFlagging } from "./flagger/index.js";
 import { computeScore, countsFromFindings } from "./scorer/index.js";
@@ -168,6 +168,14 @@ async function main(): Promise<void> {
       `Scan ${scanTimestamp} anonymous-link detection: no anonymous links found.`
     );
   }
+
+  // 6c. Supersede the previous scans' open findings (scan-supersession).
+  //     Throws on failure: the scan fails loudly rather than scoring a
+  //     half-superseded store; the next scan heals it.
+  const closed = await supersedePreviousFindings(store, findings, scanTimestamp);
+  console.log(
+    `Scan ${scanTimestamp} supersession: ${closed.superseded} superseded, ${closed.resolved} resolved.`
+  );
 
   // 7. Compute the Copilot-readiness score (task 5).
   //    Pure function: reads the findings for this scan from the store,

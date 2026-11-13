@@ -165,7 +165,7 @@ describe("console read API", () => {
       timestamp: SCAN, result: "failure", error: "boom", restorePath: null,
     };
     const r = rig([makeFinding("s1", "overshared-site"), makeFinding("g1", "stale-guest")], { audit: [entry] });
-    await r.decisions.put({ findingId: "s1", owner: ADMIN, action: "Restrict", decidedAt: SCAN, acceptedUntil: null });
+    await r.decisions.put({ findingId: "s1", type: "overshared-site", subjectId: "subject-s1", owner: ADMIN, action: "Restrict", decidedAt: SCAN, acceptedUntil: null });
     const res = await r.api.findings(new URLSearchParams());
     assert.equal(res.status, 200);
     const list = body<FindingsResponse>(res).findings;
@@ -190,6 +190,21 @@ describe("console read API", () => {
     assert.deepEqual(both.findings.map((v) => v.finding.id), ["s1"]);
     assert.equal((await api.findings(new URLSearchParams("type=bogus"))).status, 400);
     assert.equal((await api.findings(new URLSearchParams("status=bogus"))).status, 400);
+  });
+
+  it("GET /findings accepts all five statuses and filters superseded and resolved", async () => {
+    const { api } = rig([
+      makeFinding("s1", "overshared-site", { status: "superseded" }),
+      makeFinding("s2", "overshared-site", { status: "resolved" }),
+      makeFinding("s3", "overshared-site"),
+    ]);
+    for (const s of ["open", "actioned", "dismissed", "superseded", "resolved"]) {
+      assert.equal((await api.findings(new URLSearchParams(`status=${s}`))).status, 200, s);
+    }
+    const sup = body<FindingsResponse>(await api.findings(new URLSearchParams("status=superseded")));
+    assert.deepEqual(sup.findings.map((v) => v.finding.id), ["s1"]);
+    const res = body<FindingsResponse>(await api.findings(new URLSearchParams("status=resolved")));
+    assert.deepEqual(res.findings.map((v) => v.finding.id), ["s2"]);
   });
 
   it("GET /findings is empty when no scan is recorded", async () => {
@@ -345,6 +360,27 @@ describe("console decide endpoint", () => {
     assert.deepEqual(body<ApiError>(second).record, first.record);
     assert.equal(r.dispatchCalls.length, 1);
     assert.equal(r.handlerCalls.length, 1);
+  });
+
+  it("a second finding row for a decided subject gets 409, and a different subject does not", async () => {
+    const r = rig([
+      makeFinding("s1", "overshared-site", { subjectId: "shared" }),
+      makeFinding("s2", "overshared-site", { subjectId: "shared" }),
+      makeFinding("s3", "overshared-site", { subjectId: "other" }),
+    ]);
+    assert.equal((await r.api.decide("s1", { action: "Restrict" })).status, 200);
+    assert.equal((await r.api.decide("s2", { action: "Restrict" })).status, 409);
+    assert.equal((await r.api.decide("s3", { action: "Restrict" })).status, 200);
+    assert.equal(r.dispatchCalls.length, 2);
+  });
+
+  it("an expired Keep no longer blocks a new decision", async () => {
+    const r = rig([makeFinding("s1", "overshared-site")]);
+    await r.decisions.put({
+      findingId: "old", type: "overshared-site", subjectId: "subject-s1", owner: ADMIN, action: "Keep",
+      decidedAt: "2026-01-01T00:00:00.000Z", acceptedUntil: "2026-01-31T00:00:00.000Z",
+    });
+    assert.equal((await r.api.decide("s1", { action: "Restrict" })).status, 200);
   });
 
   it("failure never marks fixed: a failing action leaves the finding open and audits the failure", async () => {

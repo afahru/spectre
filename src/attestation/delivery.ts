@@ -5,8 +5,8 @@
  * Framework Connector.
  *   - The recipient comes from resolveRecipient; ownerless or unreachable
  *     findings go to the admin queue, never to a guessed address.
- *   - Every send is recorded in the SendLog with its timestamp. A finding
- *     with any recorded send is never sent again here; the second message
+ *   - Every send is recorded in the SendLog with its timestamp. A ghost
+ *     with any recorded send (under any finding row) is never sent again here; the second message
  *     belongs to the nudge rule (nudge.ts).
  *   - A failed send goes to the admin queue with the error attached and is
  *     not retried.
@@ -17,10 +17,10 @@
 
 import Database from "better-sqlite3";
 import { ClientSecretCredential } from "@azure/identity";
-import type { Finding } from "../store/types.js";
+import type { Finding, GhostType } from "../store/types.js";
 import type { FindingStore } from "../store/FindingStore.js";
 import { buildCard } from "./card.js";
-import type { DecisionStore } from "./decision.js";
+import { isDecisionActive, type DecisionStore } from "./decision.js";
 import type { AdminQueue, SendLog, SendRecord } from "./nudge.js";
 import { resolveRecipient } from "./recipient.js";
 
@@ -94,6 +94,17 @@ export class SqliteDeliveryStore implements ConversationStore, SendLog {
     return rows.map((r) => ({ findingId: r.finding_id, owner: r.owner, sentAt: r.sent_at }));
   }
 
+  /** Joins to findings (rows are never deleted), so superseded rows still resolve. */
+  async listBySubject(type: GhostType, subjectId: string): Promise<SendRecord[]> {
+    const rows = this.db
+      .prepare(
+        `SELECT s.finding_id, s.owner, s.sent_at FROM attestation_sends s
+         JOIN findings f ON f.id = s.finding_id WHERE f.type = ? AND f.subject_id = ?`,
+      )
+      .all(type, subjectId) as { finding_id: string; owner: string; sent_at: string }[];
+    return rows.map((r) => ({ findingId: r.finding_id, owner: r.owner, sentAt: r.sent_at }));
+  }
+
   async add(record: SendRecord): Promise<void> {
     this.db
       .prepare("INSERT INTO attestation_sends (finding_id, owner, sent_at) VALUES (?, ?, ?)")
@@ -148,9 +159,10 @@ export async function deliverOpenFindings(deps: DeliveryDeps): Promise<DeliveryS
 }
 
 async function deliverFinding(deps: DeliveryDeps, f: Finding): Promise<keyof DeliverySummary> {
-  if ((await deps.sends.list(f.id)).length > 0) return "skipped"; // second message is the nudge's
-  if (await deps.decisions.get(f.id)) return "skipped";
-  if (await deps.queue.has(f.id)) return "skipped";
+  const now = (deps.now ?? (() => new Date()))();
+  if ((await deps.sends.listBySubject(f.type, f.subjectId)).length > 0) return "skipped"; // second message is the nudge's
+  if (isDecisionActive(await deps.decisions.getBySubject(f.type, f.subjectId), now)) return "skipped";
+  if (await deps.queue.hasBySubject(f.type, f.subjectId)) return "skipped";
 
   const to = resolveRecipient(f, (upn) => deps.conversations.get(upn) !== null);
   if (to.kind === "admin-queue") {
@@ -167,6 +179,6 @@ async function deliverFinding(deps: DeliveryDeps, f: Finding): Promise<keyof Del
     });
     return "queued";
   }
-  await deps.sends.add({ findingId: f.id, owner: to.upn, sentAt: (deps.now ?? (() => new Date()))().toISOString() });
+  await deps.sends.add({ findingId: f.id, owner: to.upn, sentAt: now.toISOString() });
   return "sent";
 }

@@ -41,7 +41,7 @@
 
 import { loadConfig } from "../config.js";
 import { createGraphClient } from "../graph/index.js";
-import { SqliteFindingStore } from "../store/index.js";
+import { SqliteFindingStore, supersedePreviousFindings } from "../store/index.js";
 import { CollectorProgressStore, runInventory, detectAnonymousLinks } from "../collector/index.js";
 import { runFlagging, SEVERITY_WEIGHTS } from "../flagger/index.js";
 import { computeScore, countsFromFindings } from "../scorer/index.js";
@@ -161,6 +161,10 @@ async function main(): Promise<void> {
   console.log(
     `[verify] Anonymous-link detection: ${anonymousSites.length} site(s) with anonymous links.\n`
   );
+
+  // ── 4c. Supersede previous scans' open findings (same shared step as the main scan) ─
+  const closed = await supersedePreviousFindings(store, findings, scanTimestamp);
+  console.log(`[verify] Supersession: ${closed.superseded} superseded, ${closed.resolved} resolved.\n`);
 
   // ── 5. Compute score ──────────────────────────────────────────────────
   // The scan is tenant-wide (it also finds the tenant's real pre-existing

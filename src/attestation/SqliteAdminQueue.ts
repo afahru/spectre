@@ -8,6 +8,7 @@
 import Database from "better-sqlite3";
 import type { AdminQueue } from "./nudge.js";
 import type { ExceptionReason } from "./recipient.js";
+import type { GhostType } from "../store/types.js";
 
 export interface AdminQueueEntry {
   findingId: string;
@@ -31,6 +32,18 @@ export class SqliteAdminQueue implements AdminQueue {
 
   async has(findingId: string): Promise<boolean> {
     return this.db.prepare("SELECT 1 FROM attestation_admin_queue WHERE finding_id = ?").get(findingId) !== undefined;
+  }
+
+  /** Joins to findings (rows are never deleted), so a queue entry under an old row still counts. */
+  async hasBySubject(type: GhostType, subjectId: string): Promise<boolean> {
+    return (
+      this.db
+        .prepare(
+          `SELECT 1 FROM attestation_admin_queue q JOIN findings f ON f.id = q.finding_id
+           WHERE f.type = ? AND f.subject_id = ?`,
+        )
+        .get(type, subjectId) !== undefined
+    );
   }
 
   async enqueue(entry: { findingId: string; reason: ExceptionReason; error?: string }): Promise<void> {

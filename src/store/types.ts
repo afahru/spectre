@@ -19,7 +19,7 @@ export type GhostType =
   | "cold-storage";
 
 /** Lifecycle status of a finding. */
-export type FindingStatus = "open" | "actioned" | "dismissed";
+export type FindingStatus = "open" | "actioned" | "dismissed" | "superseded" | "resolved";
 
 /**
  * Raw numbers carried with a finding, sourced directly from Graph responses.

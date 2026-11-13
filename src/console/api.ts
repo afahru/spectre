@@ -11,7 +11,7 @@
  */
 
 import { ACTIONS, type AttestationAction } from "../attestation/card.js";
-import { KEEP_SUPPRESS_DAYS, type DecisionRecord, type DecisionStore } from "../attestation/decision.js";
+import { isDecisionActive, KEEP_SUPPRESS_DAYS, type DecisionRecord, type DecisionStore } from "../attestation/decision.js";
 import { resolveRecipient, type ExceptionReason } from "../attestation/recipient.js";
 import { ACTION_BY_GHOST_TYPE } from "../remediation/dispatcher.js";
 import type { AuditEntry, Decision, DispatchResult } from "../remediation/types.js";
@@ -24,7 +24,7 @@ import type {
 } from "./types.js";
 
 const GHOST_TYPES: GhostType[] = ["overshared-site", "orphaned-site", "stale-guest", "idle-licence", "cold-storage"];
-const STATUSES: FindingStatus[] = ["open", "actioned", "dismissed"];
+const STATUSES: FindingStatus[] = ["open", "actioned", "dismissed", "superseded", "resolved"];
 
 /** Findings the attestation loop queued for the admin (no response / unreachable). */
 export interface QueuedException {
@@ -156,18 +156,22 @@ export function createConsoleApi(deps: ConsoleDeps) {
 
       if (!deps.adminUpn) return fail(503, "Admin identity is not configured (ADMIN_UPN); decisions are disabled.");
 
-      const existing = await deps.decisions.get(findingId);
-      if (existing) return fail(409, "A decision is already recorded for this finding.", { record: existing });
-
       const queued = (await exceptionList()).find((e) => e.finding.id === findingId);
       if (!queued) return fail(404, "Finding is not in the exceptions queue.");
+
+      const at = now();
+      const existing = await deps.decisions.getBySubject(queued.finding.type, queued.finding.subjectId);
+      if (existing && isDecisionActive(existing, at)) {
+        return fail(409, "A decision is already recorded for this finding.", { record: existing });
+      }
       if (!queued.allowedActions.includes(chosen)) {
         return fail(422, `${chosen} is not allowed for ${queued.finding.type}.`);
       }
 
-      const at = now();
       const record: DecisionRecord = {
         findingId,
+        type: queued.finding.type,
+        subjectId: queued.finding.subjectId,
         owner: deps.adminUpn,
         action: chosen,
         decidedAt: at.toISOString(),

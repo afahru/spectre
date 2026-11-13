@@ -15,8 +15,15 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 import { loadConfig } from "../config.js";
 import { SqliteFindingStore } from "../store/index.js";
-import { InMemoryDecisionStore } from "../attestation/decision.js";
-import { createDispatcher, SqliteAuditLog } from "../remediation/index.js";
+import { SqliteDecisionStore } from "../attestation/SqliteDecisionStore.js";
+import { createGraphClient } from "../graph/index.js";
+import {
+  createArchiveSiteHandler,
+  createDispatcher,
+  createExpireGuestHandler,
+  createRevokeLinkHandler,
+  SqliteAuditLog,
+} from "../remediation/index.js";
 import { createConsoleApi, type ConsoleApi, type ApiResult } from "./api.js";
 
 const WEB_ROOT = resolve(__dirname, "../../web/dist");
@@ -97,13 +104,21 @@ if (require.main === module) {
   const config = loadConfig();
   const findings = new SqliteFindingStore(config.dbPath);
   const audit = new SqliteAuditLog(config.dbPath);
-  // As in attestation/server.ts: no Graph action handlers are wired here, so the
-  // dispatcher refuses Restrict/Archive and says so; it never executes anything.
-  const dispatcher = createDispatcher({ store: findings, audit, handlers: {} });
+  // As in attestation/server.ts: archive takes no delegated session (null), so it is queued.
+  const graph = createGraphClient(config);
+  const dispatcher = createDispatcher({
+    store: findings,
+    audit,
+    handlers: {
+      restrict: createRevokeLinkHandler(graph),
+      archive: createArchiveSiteHandler(graph, null),
+      revoke: createExpireGuestHandler(graph),
+    },
+  });
   const api = createConsoleApi({
     findings,
     audit,
-    decisions: new InMemoryDecisionStore(),
+    decisions: new SqliteDecisionStore(config.dbPath),
     dispatch: (d) => dispatcher.dispatch(d),
     adminUpn: process.env["ADMIN_UPN"] || null,
   });

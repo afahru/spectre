@@ -15,7 +15,7 @@
  * Teams retries and the owner can tap again (Design: Errors).
  */
 
-import { createPublicKey, verify, type webcrypto } from "node:crypto";
+import { createPublicKey, verify, type JsonWebKey } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { ConversationStore } from "./delivery.js";
 import type { DecisionOutcome } from "./decision.js";
@@ -24,7 +24,7 @@ export const MESSAGES_PATH = "/api/messages";
 const OPENID_CONFIG = "https://login.botframework.com/v1/.well-known/openidconfig";
 const BOT_ISSUER = "https://api.botframework.com";
 
-interface Jwk extends webcrypto.JsonWebKey {
+interface Jwk extends JsonWebKey {
   kid?: string;
 }
 

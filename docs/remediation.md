@@ -47,7 +47,7 @@ The bot server (`src/attestation/server.ts`) and the console server (`src/consol
 
 ### 2.1 How it works
 
-The scan's permissions fetcher records the anonymous link's Graph ids on the finding, in `numbers.anonymousLink`: `driveId`, `itemId`, and `permissionId`. The handler reads those three ids from the finding and deletes that one permission. It never invents an id. If any of the three is missing, the handler reports `failure` with the error "No permission id was recorded for this link during the scan; nothing was revoked", and nothing is deleted.
+The scan's permissions fetcher records the anonymous link's Graph ids on the finding, in `numbers.anonymousLink`: `driveId`, `itemId`, and `permissionId`. The handler reads those three ids from the finding and deletes that one permission ([Microsoft Learn, search-index citation](https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/permission_delete?view=odsp-graph-online)). It never invents an id. If any of the three is missing, the handler reports `failure` with the error "No permission id was recorded for this link during the scan; nothing was revoked", and nothing is deleted.
 
 On a successful `DELETE`, the handler reports `success` with the target set to the full permission path. The dispatcher writes the audit entry and marks the finding `actioned`.
 
@@ -75,7 +75,7 @@ A common cause of the missing-ids failure is a finding created by a scan that ra
 **Ghost type:** `stale-guest`.
 **Decision that triggers it:** the owner (or the admin, from the exceptions queue) taps Restrict on a stale-guest card. Note the naming: the card action is Restrict, and the dispatcher maps it to the `revoke` remediation action for this ghost type.
 **Platform call:** `DELETE /users/{guest-id}`.
-**Permission required:** a user write permission on the Graph app registration. The repository does not name the exact permission in code for this call; grant the permission that covers user deletion and verify it before relying on the action.
+**Permission required:** `User.ReadWrite.All`, the least-privileged permission Microsoft Learn names for `DELETE /users` ([Microsoft Learn](https://learn.microsoft.com/en-us/graph/api/user-delete?view=graph-rest-1.0)). The repository does not name the exact permission in code for this call; grant `User.ReadWrite.All` and verify it before relying on the action.
 
 ### 3.1 How it works
 
@@ -92,7 +92,7 @@ A guest is counted as fixed only when the directory confirms it is gone, never o
 
 ### 3.3 Reversibility
 
-**Reversible for 30 days.** Entra ID soft-deletes the user into deleted items. The guest can be restored within 30 days with `POST /directory/deletedItems/{guest-id}/restore`. The audit entry records the restore path as `Within 30 days: POST /directory/deletedItems/{guest-id}/restore` (with the real guest id). After 30 days the deletion becomes permanent under Entra ID retention rules, which Spectre does not control.
+**Reversible for 30 days.** Entra ID soft-deletes the user into deleted items. The guest can be restored within 30 days with `POST /directory/deletedItems/{guest-id}/restore`. The audit entry records the restore path as `Within 30 days: POST /directory/deletedItems/{guest-id}/restore` (with the real guest id). After 30 days the deletion becomes permanent and cannot be stopped or restored, not even by Microsoft Support ([Microsoft Learn](https://learn.microsoft.com/en-us/entra/fundamentals/users-restore), [Microsoft Learn](https://learn.microsoft.com/en-us/graph/api/user-delete?view=graph-rest-1.0)). Guests who do not sign in for the configured number of days are disabled for 30 days, then deleted, and can be restored for up to 30 days after deletion ([Microsoft Learn](https://learn.microsoft.com/en-us/entra/identity/users/clean-up-stale-guest-accounts)).
 
 ### 3.4 What it changes
 
@@ -106,7 +106,7 @@ The guest account is deleted and the guest loses access to the tenant. No other 
 
 ### 4.1 Why there is no app-only path
 
-No Graph endpoint archives a SharePoint site, and the SharePoint TenantAdministration REST API rejects app-only tokens (verified during development). The service therefore cannot archive a site with its own credentials. This is a platform constraint, not a missing feature in Spectre.
+Site archiving exists in Microsoft Graph only as a beta endpoint (`POST /sites/{site-id}/archive`), which Microsoft says is not supported for production use, and the SharePoint TenantAdministration REST API rejects app-only tokens (verified during development). The service therefore cannot archive a site with its own credentials in a supported production path. This is a platform constraint, not a missing feature in Spectre. ([Microsoft Learn, search-index citation](https://learn.microsoft.com/en-us/graph/api/site-archive?view=graph-rest-beta))
 
 ### 4.2 How it works
 
@@ -127,7 +127,7 @@ with `<site-url>` replaced by the site URL read from Graph. The admin runs it un
 
 ### 4.3 Reversibility
 
-**Reversible.** An archived site can be reactivated from the SharePoint admin center (Archived sites). The audit entry records that restore path. Archiving does not delete content; it makes the site read-only and removes it from active use until reactivated.
+**Reversible.** An archived site can be reactivated from the SharePoint admin center (Archived sites). The audit entry records that restore path. Archiving does not delete content; it makes the site read-only and removes it from active use until reactivated. Archived content is not used to train Copilot, and files that are reactivated cannot be archived again for 120 days. ([Microsoft Learn](https://learn.microsoft.com/en-us/microsoft-365/archive/archive-overview?view=o365-worldwide))
 
 ### 4.4 Failure modes
 
@@ -153,3 +153,18 @@ The remediation spec called for live verification on the fixture tenant (task 5.
 - **Score moved.** The re-scan after the two executed actions showed 2 overshared findings (down from 3) and 4 stale guests (down from 5), and the fixture score moved from 73 to 78. The fixtures were re-seeded afterwards so the verifier passes again at 73.
 
 Unit tests for the dispatcher and the audit entries also exist (`src/remediation/__tests__/remediation.test.ts`), and the full suite passes 62 out of 62 tests. When live verification runs again, back up the database file first, because it changes fixture counts; re-run the seeder afterwards to restore them.
+
+## 7. References
+
+Microsoft Learn links first. All links below appear in the research report of 13 November 2026; pages marked (live) were opened live that day, the rest are cited from the report's search-index sources.
+
+- Microsoft Learn (live): Delete user (30-day restore window): https://learn.microsoft.com/en-us/graph/api/user-delete?view=graph-rest-1.0
+- Microsoft Learn (live): Restore a deleted user: https://learn.microsoft.com/en-us/entra/fundamentals/users-restore
+- Microsoft Learn (live): Monitor and clean up stale guest accounts: https://learn.microsoft.com/en-us/entra/identity/users/clean-up-stale-guest-accounts
+- Microsoft Learn (live): Microsoft 365 Archive overview: https://learn.microsoft.com/en-us/microsoft-365/archive/archive-overview?view=o365-worldwide
+- Microsoft Learn (live): Turn external sharing on or off (Anyone links): https://learn.microsoft.com/en-us/sharepoint/turn-external-sharing-on-or-off
+- Microsoft Learn (search-index citation): Archive a site, beta only: https://learn.microsoft.com/en-us/graph/api/site-archive?view=graph-rest-beta
+- Microsoft Learn (search-index citation): Restore a deleted item: https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-restore?view=graph-rest-1.0
+- Microsoft Learn (search-index citation): Delete a permission: https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/permission_delete?view=odsp-graph-online
+
+Heuristics in this document: the thresholds behind the actions (90-day stale guest, 365-day cold storage) are Spectre's choices, not Microsoft definitions; they are labelled "Heuristic" in [architecture.md](architecture.md).

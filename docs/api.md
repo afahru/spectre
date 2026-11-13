@@ -32,7 +32,7 @@ Returns the latest readiness score with its inputs and the cost rollup.
 | `fixture` | `ScorerResult` over open fixture findings only (subject label starts with `Spectre Fixture `, `Spectre Ghost `, or `Spectre Idle User `), or `null` when no scan is recorded |
 | `cost` | Cost rollup, or `null` when no scan is recorded |
 
-`ScorerResult` carries `score` (integer, 0 to 100), `inputs` (the exact counts, per-type breakdown of count, weight, and penalty, total penalty, and `maxPenalty`), `scanTimestamp`, and `computedAt`. The cost rollup sums `monthlyCostUsd` over open idle-licence findings and `storageOverageCostUsd` over open cold-storage findings; either figure is `null` as soon as one price is not on file. When no scan is recorded, all four fields are `null`.
+`ScorerResult` carries `score` (integer, 0 to 100), `inputs` (the exact counts, per-type breakdown of count, weight, and penalty, total penalty, and `maxPenalty`), `scanTimestamp`, and `computedAt`. Heuristic: the 0 to 100 score is Spectre's own design. Microsoft publishes no Copilot readiness score; its Copilot readiness report shows counts only ([Microsoft Learn](https://learn.microsoft.com/en-us/microsoft-365/admin/activity-reports/microsoft-365-copilot-readiness)). The cost rollup sums `monthlyCostUsd` over open idle-licence findings and `storageOverageCostUsd` over open cold-storage findings; either figure is `null` as soon as one price is not on file. Microsoft publishes no guidance on licence cost waste, so Spectre never estimates a saving. When no scan is recorded, all four fields are `null`.
 
 ### 1.2 `GET /findings?type=&status=`
 
@@ -189,3 +189,13 @@ Proactive sends go to `{serviceUrl}/v3/conversations/{conversationId}/activities
 - There is no public API for triggering a scan, for sending a card on demand, or for running the nudge check. `deliverOpenFindings` and `runNudgeCheck` are exported functions in the codebase, not HTTP endpoints. They are invoked by the operator's daily run (`npm run attest`). See [operations.md](operations.md#1-daily-run).
 - There is no API for editing or deleting audit entries, findings, or decisions. The console exposes reads and one decide endpoint only.
 - There is no API for managing the bot registration, the Teams app package, or the Entra app registration. Those are manual steps in the Entra admin center, the Teams Developer Portal, and the Teams admin center. See [deployment.md](deployment.md).
+
+## 4. References
+
+Microsoft Learn links first. All links below appear in the research report of 13 November 2026; pages marked (live) were opened live that day.
+
+- Microsoft Learn (live): Copilot readiness report (counts, no score): https://learn.microsoft.com/en-us/microsoft-365/admin/activity-reports/microsoft-365-copilot-readiness
+- Microsoft Learn (live): Microsoft 365 admin centre active users report: https://learn.microsoft.com/en-us/microsoft-365/admin/activity-reports/active-users-ww
+- Microsoft Learn (live): getOffice365ActiveUserDetail (CSV, per-service last-activity dates): https://learn.microsoft.com/en-us/graph/api/reportroot-getoffice365activeuserdetail?view=graph-rest-1.0
+
+Heuristics in this document: the 0 to 100 readiness score is Spectre's own design, not a Microsoft score; licence cost figures are unknown unless the operator supplies prices, because Microsoft publishes no guidance on licence cost waste.

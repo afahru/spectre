@@ -2,7 +2,9 @@
 
 Spectre is a Microsoft 365 tenant ghost hunter. It finds the five exposures that block a safe Copilot rollout, asks each content owner for a decision in plain English in Microsoft Teams, carries out the approved fix, and shows the tenant admin a live Copilot-readiness score with a full audit trail.
 
-The problem it solves is simple to state and expensive to ignore. Copilot follows the permissions already in your tenant, so overshared content reaches people who should never see it. Reports alone do not fix that. Spectre closes the loop: scan, ask the owner, act on the answer, and prove it in the audit log.
+Heuristic: the 0 to 100 readiness score is Spectre's own design. Microsoft publishes no Copilot readiness score; its Copilot readiness report shows counts only, such as eligible users and assigned licences. ([Microsoft Learn](https://learn.microsoft.com/en-us/microsoft-365/admin/activity-reports/microsoft-365-copilot-readiness))
+
+The problem it solves is simple to state and expensive to ignore. Copilot follows the permissions already in your tenant ([Microsoft Learn: Copilot only surfaces data the user has at least view permission to](https://learn.microsoft.com/en-us/microsoft-365/copilot/microsoft-365-copilot-privacy)), so overshared content reaches people who should never see it. Reports alone do not fix that. Spectre closes the loop: scan, ask the owner, act on the answer, and prove it in the audit log.
 
 This directory is the enterprise documentation set for the project. It is written for the people who deploy, operate, secure, and use Spectre, and it describes the system as it is built in this repository. Where a feature is not finished, the document says so plainly instead of presenting it as done.
 
@@ -45,3 +47,15 @@ The demo runs against the author's Microsoft 365 developer tenant. The service i
 - `.kiro/specs/*/requirements.md`, `design.md`, `tasks.md`: the authoritative specifications.
 - `.kiro/specs/spectre-attestation-loop/bot-registration.md`: the manual bot registration runbook.
 - `.kiro/steering/graph-conventions.md`, `narration-rule.md`, `teams-cards.md`: the steering rules the code follows.
+
+## References
+
+Microsoft Learn links first. All links below appear in the research report of 13 November 2026; pages marked (live) were opened live that day.
+
+- Microsoft Learn (live): Copilot privacy, Copilot only surfaces data the user has at least view permission to: https://learn.microsoft.com/en-us/microsoft-365/copilot/microsoft-365-copilot-privacy
+- Microsoft Learn (live): Configure a secure and governed data foundation for Microsoft 365 Copilot: https://learn.microsoft.com/en-us/microsoft-365/copilot/configure-secure-governed-data-foundation-microsoft-365-copilot
+- Microsoft Learn (live): Copilot readiness report (counts, no score): https://learn.microsoft.com/en-us/microsoft-365/admin/activity-reports/microsoft-365-copilot-readiness
+- Microsoft Learn (live): Monitor and clean up stale guest accounts: https://learn.microsoft.com/en-us/entra/identity/users/clean-up-stale-guest-accounts
+- Microsoft Learn (live): Data access governance reports: https://learn.microsoft.com/en-us/sharepoint/data-access-governance-reports
+
+Heuristics in this set: the 0 to 100 readiness score is Spectre's own design, not a Microsoft score; the 90-day stale-guest and idle-licence thresholds and the 365-day cold-storage threshold are Spectre's choices, not Microsoft definitions; licence cost figures are unknown unless the operator supplies prices, because Microsoft publishes no guidance on licence cost waste.

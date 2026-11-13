@@ -56,10 +56,10 @@ The scan engine also reads sites, users, guests, licences, sign-in activity, and
 
 Read endpoints used by the scan engine and the seeder:
 
-- `GET /sites/getAllSites` with `$select=id,displayName,webUrl,createdDateTime,lastModifiedDateTime`
+- `GET /sites/getAllSites` with `$select=id,displayName,webUrl,createdDateTime,lastModifiedDateTime` ([Microsoft Learn](https://learn.microsoft.com/en-us/graph/api/site-list?view=graph-rest-1.0); the site resource has no owner field and no `sharingCapability` property: [Microsoft Learn](https://learn.microsoft.com/en-us/graph/api/resources/site?view=graph-rest-1.0))
 - `GET /users` (guest inventory, filtered by user type)
-- `GET /subscribedSkus` with `$select=id,skuPartNumber,consumedUnits,prepaidUnits`
-- `GET /reports/getOffice365ActiveUserDetail(period='D90')`
+- `GET /subscribedSkus` with `$select=id,skuPartNumber,consumedUnits,prepaidUnits` ([Microsoft Learn](https://learn.microsoft.com/en-us/graph/api/subscribedsku-list?view=graph-rest-1.0))
+- `GET /reports/getOffice365ActiveUserDetail(period='D90')` ([Microsoft Learn](https://learn.microsoft.com/en-us/graph/api/reportroot-getoffice365activeuserdetail?view=graph-rest-1.0); the call returns a 302 redirect to a CSV download with per-service last-activity dates and no single "last activity date" column)
 - `GET /auditLogs/signIns` (last sign-in per guest)
 - `GET /sites/{siteId}/drive` and `GET /groups/{groupId}/owners` (owner enrichment)
 - `GET /drives/{drive-id}/items/{item-id}/permissions` (link scope, flagged items only)
@@ -69,12 +69,12 @@ Read endpoints used by the scan engine and the seeder:
 Write endpoints used by remediation and the seeder:
 
 - `DELETE /drives/{drive-id}/items/{item-id}/permissions/{permission-id}` (revoke anonymous link)
-- `DELETE /users/{guest-id}` (expire stale guest)
+- `DELETE /users/{guest-id}` (expire stale guest; [Microsoft Learn](https://learn.microsoft.com/en-us/graph/api/user-delete?view=graph-rest-1.0): deleted users are restorable within 30 days, then permanently deleted)
 - `GET /directory/deletedItems/{guest-id}` (confirm a guest is gone)
 - `POST /directory/deletedItems/{guest-id}/restore` (restore a guest within 30 days)
 - `POST /groups`, `POST /invitations`, `POST /users/{id}/assignLicense` (seeder only)
 
-Note: Graph does **not** expose `sharingCapability` on the site resource in v1.0 or beta. Do not add it to a `$select`; the call fails. Overshared detection goes through the permissions fetcher, not site metadata. The SharePoint TenantAdministration REST API rejects app-only tokens, so site archiving has no app-only path; see [remediation.md](remediation.md#4-archive-a-cold-site).
+Note: Graph does **not** expose `sharingCapability` on the site resource in v1.0 or beta ([Microsoft Learn](https://learn.microsoft.com/en-us/graph/api/resources/site?view=graph-rest-1.0)). Do not add it to a `$select`; the call fails. Overshared detection goes through the permissions fetcher, not site metadata. Tenant-level sharing can be read and changed through Graph v1.0 via `sharepointSettings` (`GET`/`PATCH /admin/sharepoint/settings`, [Microsoft Learn](https://learn.microsoft.com/en-us/graph/api/resources/sharepointsettings?view=graph-rest-1.0)). Site archiving exists in Graph only as a beta endpoint (`POST /sites/{site-id}/archive`), which Microsoft says is not supported for production use, and the SharePoint TenantAdministration REST API rejects app-only tokens, so there is no supported production app-only path for archiving; see [remediation.md](remediation.md#4-archive-a-cold-site).
 
 ## 3. Teams bot registration
 
@@ -193,3 +193,20 @@ For development, a tunnel (for example a Cloudflare quick tunnel) that forwards 
 - Latency matters. The Bot Framework validates the JWT on every request by fetching the OpenID configuration and JWKS; a slow tunnel adds seconds to every postback. Keep the tunnel close to the server.
 
 Known failure: a tunnel URL that changes after the host pauses or the tunnel restarts is the most common cause of "the bot stopped answering". See [operations.md](operations.md#43-the-public-endpoint-changed).
+
+## 7. References
+
+Microsoft Learn links first. All links below appear in the research report of 13 November 2026; pages marked (live) were opened live that day, the rest are cited from the report's search-index sources.
+
+- Microsoft Learn (live): List sites: https://learn.microsoft.com/en-us/graph/api/site-list?view=graph-rest-1.0
+- Microsoft Learn (live): Site resource (no owner field, no sharingCapability): https://learn.microsoft.com/en-us/graph/api/resources/site?view=graph-rest-1.0
+- Microsoft Learn (live): sharepointSettings resource (tenant-level sharingCapability): https://learn.microsoft.com/en-us/graph/api/resources/sharepointsettings?view=graph-rest-1.0
+- Microsoft Learn (live): List subscribed SKUs: https://learn.microsoft.com/en-us/graph/api/subscribedsku-list?view=graph-rest-1.0
+- Microsoft Learn (live): getOffice365ActiveUserDetail (CSV, per-service last-activity dates): https://learn.microsoft.com/en-us/graph/api/reportroot-getoffice365activeuserdetail?view=graph-rest-1.0
+- Microsoft Learn (live): Delete user (30-day restore window): https://learn.microsoft.com/en-us/graph/api/user-delete?view=graph-rest-1.0
+- Microsoft Learn (live): Restore a deleted user: https://learn.microsoft.com/en-us/entra/fundamentals/users-restore
+- Microsoft Learn (search-index citation): Archive a site, beta only: https://learn.microsoft.com/en-us/graph/api/site-archive?view=graph-rest-beta
+- Microsoft Learn (search-index citation): Restore a deleted item: https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-restore?view=graph-rest-1.0
+- Microsoft Learn (search-index citation): Delete a permission: https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/permission_delete?view=odsp-graph-online
+
+Heuristics in this document: the scan thresholds behind the endpoints above (90-day activity window, 90-day stale guest, 365-day cold storage) are Spectre's choices, not Microsoft definitions; they are labelled "Heuristic" in [architecture.md](architecture.md).

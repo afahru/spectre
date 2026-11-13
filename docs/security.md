@@ -28,14 +28,14 @@ The repository does **not** enumerate the complete read permission set in code. 
 ### 1.3 Least privilege, as built
 
 - The scan engine needs read access to sites, users, guests, licences, sign-in activity, and drive permissions. It does not need, and does not use, mail, calendar, or chat data.
-- The remediation handlers need write access only for the two destructive actions they perform: deleting a drive item permission and deleting a guest user. Archiving a site has no app-only path at all; it is queued for a delegated admin session instead of being executed by the service.
+- The remediation handlers need write access only for the two destructive actions they perform: deleting a drive item permission and deleting a guest user. Archiving a site has no supported production app-only path: site archiving exists in Graph only as a beta endpoint, which Microsoft says is not supported for production use, so Archive decisions are queued for a delegated admin session instead of being executed by the service. ([Microsoft Learn, search-index citation](https://learn.microsoft.com/en-us/graph/api/site-archive?view=graph-rest-beta))
 - The bot endpoint needs only `User.ReadBasic.All` for the UPN lookup. It does not read messages, files, or any other user data.
 - The console server makes no Graph calls. It reads the local SQLite store and serves the React app. It holds no Graph credentials in the browser; the UI cannot reach Graph.
 
 ### 1.4 What the service cannot do
 
-- It cannot archive a SharePoint site with its app-only token. The SharePoint TenantAdministration REST API rejects app-only tokens, and no Graph endpoint archives a site. Archive decisions are queued for a delegated admin session with the exact command, never executed by the service. See [remediation.md](remediation.md#4-archive-a-cold-site).
-- It cannot read `sharingCapability` from Graph. The property does not exist on the site resource in v1.0 or beta. Overshared detection goes through per-item permissions, which is slower but is the only reliable signal.
+- It cannot archive a SharePoint site with its app-only token. The SharePoint TenantAdministration REST API rejects app-only tokens, and site archiving exists in Graph only as a beta endpoint, which Microsoft says is not supported for production use. Archive decisions are queued for a delegated admin session with the exact command, never executed by the service. See [remediation.md](remediation.md#4-archive-a-cold-site).
+- It cannot read `sharingCapability` from Graph for a single site. The property does not exist on the site resource in v1.0 or beta ([Microsoft Learn](https://learn.microsoft.com/en-us/graph/api/resources/site?view=graph-rest-1.0)). Tenant-level sharing can be read and changed via `sharepointSettings` ([Microsoft Learn](https://learn.microsoft.com/en-us/graph/api/resources/sharepointsettings?view=graph-rest-1.0)). Overshared detection goes through per-item permissions, which is slower but is the only reliable signal.
 - It cannot act without a recorded approval. The dispatcher refuses any action that has no recorded owner or admin approval, and the refusal is reported, not hidden.
 
 ## 2. Secret handling
@@ -95,7 +95,7 @@ Properties the audit log guarantees:
 
 - **One entry per action.** The dispatcher appends the entry after the handler returns and before it reports the result.
 - **Failure never marks a finding fixed.** A finding is set to `actioned` only when the handler reports `success`. On `failure` or `queued`, the finding stays `open` and the error is on the entry.
-- **The restore path is recorded where one exists.** Guest expiry records the 30-day restore path. Archive records the reactivation path. Link revocation records no restore path, and the entry says so plainly by having `restore_path` null: the link is gone and must be recreated by the owner.
+- **The restore path is recorded where one exists.** Guest expiry records the 30-day restore path: a deleted user can be restored within 30 days, after which deletion is permanent and unrestorable, not even by Microsoft Support ([Microsoft Learn](https://learn.microsoft.com/en-us/entra/fundamentals/users-restore)). Archive records the reactivation path. Link revocation records no restore path, and the entry says so plainly by having `restore_path` null: the link is gone and must be recreated by the owner.
 - **The attestation loop never writes to the audit log directly.** Only the dispatcher writes it, so an entry always means an action was attempted.
 - **The audit log is read-only from the console.** The console API exposes `GET /audit`; there is no endpoint that edits or deletes entries.
 
@@ -120,3 +120,13 @@ The Teams app package declares the bot with scope `personal` and `isNotification
 - The only write endpoint is `POST /exceptions/{id}/decide`. It requires a JSON content type (a non-JSON content type receives 415, which also blocks blind cross-site posts), a known action, a finding that is in the exceptions queue, and `ADMIN_UPN` configured on the server. Without `ADMIN_UPN`, every decide request receives 503.
 - The decide endpoint records the approval before dispatching, returns 409 when a decision is already recorded, and returns 422 when the action is not allowed for the ghost type. It never executes a fix itself.
 - The API responses set `cache-control: no-store`. The UI holds no credentials and makes no Graph calls.
+
+## 7. References
+
+Microsoft Learn links first. All links below appear in the research report of 13 November 2026; pages marked (live) were opened live that day, the rest are cited from the report's search-index sources.
+
+- Microsoft Learn (live): Site resource (no owner field, no sharingCapability): https://learn.microsoft.com/en-us/graph/api/resources/site?view=graph-rest-1.0
+- Microsoft Learn (live): sharepointSettings resource (tenant-level sharingCapability): https://learn.microsoft.com/en-us/graph/api/resources/sharepointsettings?view=graph-rest-1.0
+- Microsoft Learn (live): Delete user (30-day restore window): https://learn.microsoft.com/en-us/graph/api/user-delete?view=graph-rest-1.0
+- Microsoft Learn (live): Restore a deleted user: https://learn.microsoft.com/en-us/entra/fundamentals/users-restore
+- Microsoft Learn (search-index citation): Archive a site, beta only: https://learn.microsoft.com/en-us/graph/api/site-archive?view=graph-rest-beta

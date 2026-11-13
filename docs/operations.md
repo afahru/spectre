@@ -175,3 +175,14 @@ These are true of the current code. Do not work around them silently; plan them 
 7. **The admin console spec task list is partly out of date.** The console task 5.2 is done; task 5.1 (unit-test the read API and the decide endpoint) is still open. The code governs over the checkboxes.
 
 Resolved since the first draft of this document: decisions are now persisted in SQLite (`attestation_decisions`), the remediation handlers are wired into both servers, the admin queue is persisted (`attestation_admin_queue`) and served by the console, the attestation unit tests exist (23 tests, 62 tests total), and live remediation verification has been run on the fixture tenant (anonymous link deleted, guest deleted, cold-site archive queued; the fixture score moved from 73 to 78 across the two actions, then fixtures were re-seeded back to 73).
+
+Heuristics the runbook relies on: the 90-day stale-guest and idle-licence thresholds and the 365-day cold-storage threshold are Spectre's choices, not Microsoft definitions; the 0 to 100 readiness score is Spectre's own design, not a Microsoft score. The thresholds are labelled "Heuristic" in [architecture.md](architecture.md).
+
+## 6. References
+
+Microsoft Learn links first. All links below appear in the research report of 13 November 2026; pages marked (live) were opened live that day.
+
+- Microsoft Learn (live): Monitor and clean up stale guest accounts: https://learn.microsoft.com/en-us/entra/identity/users/clean-up-stale-guest-accounts
+- Microsoft Learn (live): Restore a deleted user: https://learn.microsoft.com/en-us/entra/fundamentals/users-restore
+- Microsoft Learn (live): Copilot readiness report (counts, no score): https://learn.microsoft.com/en-us/microsoft-365/admin/activity-reports/microsoft-365-copilot-readiness
+- Microsoft Learn (live): Data access governance reports: https://learn.microsoft.com/en-us/sharepoint/data-access-governance-reports

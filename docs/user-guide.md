@@ -28,7 +28,9 @@ Spectre calls each exposure type a ghost. The five are:
 | **Idle licence** | A licence is assigned to someone who has not used Microsoft 365 in 90 days. | You are paying for a licence nobody uses. The card states the monthly cost when it is known. |
 | **Cold storage** | A site has not been changed in a year or more. | Old content keeps costing storage. Archiving it stops the cost. |
 
-The admin console shows one score from 0 to 100 for the whole tenant: 100 means no open exposures, 0 means the tenant is severely exposed. The score is computed from the counts and a fixed weight per ghost type, and the console shows the counts and weights beside the score so you can see why the tenant scores what it scores. Unknown costs are shown as "unknown", never as zero and never as a guess.
+Three of these definitions are Spectre's own choices, not Microsoft rules. Heuristic: "stale guest" has no fixed Microsoft definition; Microsoft's closest concept is the inactive-guest report, whose 90-day threshold is the configurable default, and guests who never signed in are measured from their creation date. Heuristic: Microsoft publishes no unused-licence threshold, so Spectre flags 90 days of no activity. Heuristic: Microsoft leaves the inactivity period to the admin's inactive-site policy, so Spectre uses one year. ([Microsoft Learn: stale guests](https://learn.microsoft.com/en-us/entra/identity/users/clean-up-stale-guest-accounts), [activity reports](https://learn.microsoft.com/en-us/microsoft-365/admin/activity-reports/active-users-ww), [inactive-site policies](https://learn.microsoft.com/en-us/sharepoint/inactive-site-policy)) Anyone links need no sign-in and can be passed on; Microsoft documents the four sharing levels and the Anyone-link controls here: [Microsoft Learn](https://learn.microsoft.com/en-us/sharepoint/turn-external-sharing-on-or-off).
+
+The admin console shows one score from 0 to 100 for the whole tenant: 100 means no open exposures, 0 means the tenant is severely exposed. The score is computed from the counts and a fixed weight per ghost type, and the console shows the counts and weights beside the score so you can see why the tenant scores what it scores. Unknown costs are shown as "unknown", never as zero and never as a guess. Heuristic: the 0 to 100 score is Spectre's own design. Microsoft publishes no Copilot readiness score; its readiness report shows counts only, such as eligible users and assigned licences. ([Microsoft Learn](https://learn.microsoft.com/en-us/microsoft-365/admin/activity-reports/microsoft-365-copilot-readiness))
 
 ## 3. The card: what you receive
 
@@ -69,7 +71,7 @@ Important: **removing a public link cannot be undone.** The link is gone and mus
 
 Choose this when the site is no longer used and should be archived.
 
-What happens: the site is archived through the SharePoint admin surface. Archiving is reversible: an archived site can be reactivated from the SharePoint admin center. The finding is marked fixed and the action is written to the audit log with your name, the time, and the site that was archived.
+What happens: the site is archived through the SharePoint admin surface. Archiving is reversible: an archived site can be reactivated from the SharePoint admin center. Archived content is not used to train Copilot, and files that are reactivated cannot be archived again for 120 days. ([Microsoft Learn](https://learn.microsoft.com/en-us/microsoft-365/archive/archive-overview?view=o365-worldwide)) The finding is marked fixed and the action is written to the audit log with your name, the time, and the site that was archived.
 
 Note: in the current build, archiving needs a delegated admin session, because the service cannot archive a site with its own credentials. If no delegated session is available, your Archive decision is recorded and queued for the admin with the exact command to run. The finding stays open until the admin runs it. You will not be asked again about the same item while it is queued.
 
@@ -110,3 +112,17 @@ Your admin sees it in the console, attached to the finding, with your name and t
 
 **Is my data shared outside the company?**
 No. Spectre runs in your tenant, reads your tenant through Microsoft Graph, and messages you in Teams. It does not send tenant data anywhere else.
+
+## 8. References
+
+Microsoft Learn links first. All links below appear in the research report of 13 November 2026; pages marked (live) were opened live that day.
+
+- Microsoft Learn (live): Monitor and clean up stale guest accounts: https://learn.microsoft.com/en-us/entra/identity/users/clean-up-stale-guest-accounts
+- Microsoft Learn (live): Microsoft 365 admin centre active users report: https://learn.microsoft.com/en-us/microsoft-365/admin/activity-reports/active-users-ww
+- Microsoft Learn (live): Inactive site policies: https://learn.microsoft.com/en-us/sharepoint/inactive-site-policy
+- Microsoft Learn (live): Turn external sharing on or off (Anyone links): https://learn.microsoft.com/en-us/sharepoint/turn-external-sharing-on-or-off
+- Microsoft Learn (live): Microsoft 365 Archive overview: https://learn.microsoft.com/en-us/microsoft-365/archive/archive-overview?view=o365-worldwide
+- Microsoft Learn (live): Copilot readiness report (counts, no score): https://learn.microsoft.com/en-us/microsoft-365/admin/activity-reports/microsoft-365-copilot-readiness
+- Microsoft Learn (live): Copilot privacy, Copilot only surfaces data the user has at least view permission to: https://learn.microsoft.com/en-us/microsoft-365/copilot/microsoft-365-copilot-privacy
+
+Heuristics in this guide: "stale guest" at 90 days, "idle licence" at 90 days, and "cold storage" at one year are Spectre's choices, not Microsoft definitions; the 0 to 100 readiness score is Spectre's own design, not a Microsoft score; licence cost figures are unknown unless the operator supplies prices, because Microsoft publishes no guidance on licence cost waste.

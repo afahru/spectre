@@ -5,7 +5,7 @@
 
 ## The problem Spectre solves
 
-Microsoft Copilot follows the permissions already in your tenant. If a site can be opened by anyone with a link, if a guest who left months ago still has access, or if a site has no owner at all, Copilot can show that content to people who should never see it. Most organisations discover this the hard way, after Copilot is already switched on.
+Microsoft Copilot follows the permissions already in your tenant. Copilot only surfaces data the user has at least view permission to ([Microsoft Learn](https://learn.microsoft.com/en-us/microsoft-365/copilot/microsoft-365-copilot-privacy)), so if a site can be opened by anyone with a link, if a guest who left months ago still has access, or if a site has no owner at all, Copilot can show that content to people who should never see it. Most organisations discover this the hard way, after Copilot is already switched on.
 
 Spectre finds those exposures before Copilot does. It scans a Microsoft 365 tenant for the five risks that block a safe Copilot rollout: overshared sites, orphaned sites, stale guests, idle licences, and cold storage. Instead of handing the admin another report, Spectre sends each finding to the person who owns it, in plain English, in Microsoft Teams, with one tap to fix it: Keep it shared, Remove the public link, or Archive this site. The admin watches a live readiness score move as the tenant gets cleaner.
 
@@ -14,15 +14,15 @@ Repository: https://github.com/afahru/spectre
 
 ## Why this matters (evidence, not hype)
 
-- Varonis 2025: 99% of organisations have sensitive data exposed to AI tools; the average tenant holds more than 27,000 sharing links, half of them open to all employees.
-- ShareGate State of Microsoft 365, September 2026 (about 1,800 IT professionals): 77% had a governance incident in the past year; 38% left former employees or guests with access; only 1% uses a purpose-built tool.
-- Gartner: 40% of Copilot rollouts were delayed three months or more over oversharing.
-- Microsoft's own answers are limited: the SharePoint Admin Agent recommends but does not act, native governance scans are capped and read-only, and the paid options charge per user per month.
+- Varonis, 2025 State of Data Security Report (1,000 real-world IT environments): 99% of organisations have exposed sensitive data that can easily be surfaced by AI. ([Varonis](https://www.varonis.com/blog/state-of-data-security-report))
+- ShareGate, State of Microsoft 365, September 2026 (IT operations survey, n=943, May 2026; self-reported, vendor-funded survey): 77% had at least one governance incident in the past 12 months; 38% reported stale access, a former employee or partner who kept access they should not have; only 1% use a tool built to prevent one. ([ShareGate](https://sharegate.com/state-of-microsoft-365/chap-3))
+- Gartner survey of 132 IT leaders (June 2024), as reported by Computerworld: oversharing concerns caused 40% to delay Copilot rollouts by three months or more. ([Computerworld](https://www.computerworld.com/article/3542000/microsoft-365-copilot-rollouts-slowed-by-data-security-roi-concerns.html))
+- Microsoft's own tools can find the exposure but do not run the fix loop. Purview Data Security Posture Management runs a weekly data risk assessment for the top 100 SharePoint sites, with item-level scanning capped at 10 sites and no OneDrive item-level scanning. SharePoint Advanced Management data access governance reports cover activity from the last 28 days, and without SharePoint Advanced Management an E5 tenant sees activity reports only, for at most 10,000 sites, with no snapshot reports or remedial actions. Restricted SharePoint Search, the old allow-list guardrail, is retiring (new enablement blocked 31 July 2026); Microsoft now points to Restricted Content Discovery. ([Purview DSPM](https://learn.microsoft.com/en-us/purview/data-security-posture-management-oversharing), [data access governance reports](https://learn.microsoft.com/en-us/sharepoint/data-access-governance-reports), [Restricted SharePoint Search](https://learn.microsoft.com/en-us/sharepoint/restricted-sharepoint-search))
 - The gap Spectre fills: nobody runs the owner-facing fix loop. Reporting an exposure is not the same as removing it. That loop is the product.
 
 ## Validated on a live tenant, not a slide deck
 
-Spectre runs against the author's Microsoft 365 developer tenant. The latest full scan covered 40 sites and produced 91 findings. The fixture scenario scores 73 out of 100 by design (penalty 27). The fixes were verified live against Microsoft Graph: an anonymous link was actually deleted (Graph confirms the permission is gone), a stale guest was actually deleted (restorable within 30 days), and one owner action moved the fixture score from 73 to 76. The test suite passes 62 out of 62 tests.
+Spectre runs against the author's Microsoft 365 developer tenant. The latest full scan covered 40 sites and produced 91 findings. The fixture scenario scores 73 out of 100 by design (penalty 27). Heuristic: the 0 to 100 score is Spectre's own design. Microsoft publishes no Copilot readiness score; its Copilot readiness report shows counts only, such as eligible users and assigned licences. ([Microsoft Learn](https://learn.microsoft.com/en-us/microsoft-365/admin/activity-reports/microsoft-365-copilot-readiness)) The fixes were verified live against Microsoft Graph: an anonymous link was actually deleted (Graph confirms the permission is gone), a stale guest was actually deleted (restorable within 30 days), and one owner action moved the fixture score from 73 to 76. The test suite passes 62 out of 62 tests.
 
 This is a working product validated on a developer tenant. It is not a production enterprise deployment yet. The honest limits are listed in [docs/operations.md](docs/operations.md#5-known-limitations).
 
@@ -71,3 +71,19 @@ Every component was specified before it was built, under `.kiro/specs/`:
 ## Admin console
 
 `npm run web:build` builds the React app (Fluent UI v9) into `web/dist`, then the console server serves it with the read API (`GET /score`, `/findings`, `/exceptions`, `/audit`) on `http://127.0.0.1:3979`. The only write is `POST /exceptions/{id}/decide`, which goes through the remediation dispatcher. Set `ADMIN_UPN` to record the deciding admin; without it, decisions return 503. The service has no sign-in of its own, so keep it on localhost or behind your access proxy. Full details are in [docs/](docs/README.md).
+
+## References
+
+Microsoft Learn links first. All links below appear in the research report of 13 November 2026; pages marked (live) were opened live that day.
+
+- Microsoft Learn (live): Copilot privacy, Copilot only surfaces data the user has at least view permission to: https://learn.microsoft.com/en-us/microsoft-365/copilot/microsoft-365-copilot-privacy
+- Microsoft Learn (live): Configure a secure and governed data foundation for Microsoft 365 Copilot: https://learn.microsoft.com/en-us/microsoft-365/copilot/configure-secure-governed-data-foundation-microsoft-365-copilot
+- Microsoft Learn (live): Data Security Posture Management for oversharing: https://learn.microsoft.com/en-us/purview/data-security-posture-management-oversharing
+- Microsoft Learn (live): Data access governance reports: https://learn.microsoft.com/en-us/sharepoint/data-access-governance-reports
+- Microsoft Learn (live): Restricted SharePoint Search (retiring, new enablement blocked 31 July 2026): https://learn.microsoft.com/en-us/sharepoint/restricted-sharepoint-search
+- Microsoft Learn (live): Copilot readiness report (counts, no score): https://learn.microsoft.com/en-us/microsoft-365/admin/activity-reports/microsoft-365-copilot-readiness
+- Varonis, 2025 State of Data Security Report: https://www.varonis.com/blog/state-of-data-security-report
+- ShareGate, State of Microsoft 365, chapter 3: https://sharegate.com/state-of-microsoft-365/chap-3
+- Computerworld, reporting a June 2024 Gartner survey of 132 IT leaders: https://www.computerworld.com/article/3542000/microsoft-365-copilot-rollouts-slowed-by-data-security-roi-concerns.html
+
+Heuristics in this document: the 0 to 100 readiness score is Spectre's own design, not a Microsoft score.

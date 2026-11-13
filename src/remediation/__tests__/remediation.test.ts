@@ -1,7 +1,8 @@
 /**
  * remediation/__tests__/remediation.test.ts
  *
- * Unit tests for the dispatcher and audit log (tasks 1.1, 1.2).
+ * Unit tests for the dispatcher, audit log and action handlers
+ * (tasks 1.1, 1.2, 2.x, 3.x, 4.1; group 5.1).
  */
 
 import { describe, it } from "node:test";
@@ -10,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { createDispatcher } from "../dispatcher.js";
 import { createRevokeLinkHandler } from "../revoke-link.js";
 import { createArchiveSiteHandler, archiveCommand } from "../archive-site.js";
+import { createExpireGuestHandler, guestRestorePath } from "../expire-guest.js";
 import type { AuditLog } from "../audit.js";
 import type { ActionHandler, AuditEntry, Decision, RemediationAction } from "../types.js";
 import type { FindingStore } from "../../store/FindingStore.js";
@@ -272,5 +274,82 @@ describe("archive handler (tasks 3.1, 3.2)", () => {
     const res = await run(createArchiveSiteHandler(graph(undefined), { archiveSite: async () => {} }));
     assert.equal(res.entry.result, "failure");
     assert.equal(res.finding?.status, "open");
+  });
+});
+
+describe("revoke handler: expire stale guest (task 4.1)", () => {
+  const graphError = (statusCode: number, message: string) =>
+    Object.assign(new Error(message), { statusCode });
+
+  /** Fake Graph client: records "VERB path" calls; each verb may be made to throw. */
+  const run = async (opts: { del?: Error; get?: Error } = {}) => {
+    const calls: string[] = [];
+    const client = {
+      api: (path: string) => ({
+        delete: async () => {
+          calls.push(`DELETE ${path}`);
+          if (opts.del) throw opts.del;
+        },
+        get: async () => {
+          calls.push(`GET ${path}`);
+          if (opts.get) throw opts.get;
+          return {};
+        },
+      }),
+    } as never;
+    const store = fakeStore([makeFinding("g1", "stale-guest")]);
+    const audit = fakeAudit();
+    const d = createDispatcher({
+      store,
+      audit,
+      handlers: { revoke: createExpireGuestHandler(client) },
+    });
+    await d.dispatch(decision("g1", "revoke"));
+    const [entry] = await audit.listByFinding("g1");
+    return { calls, entry, status: (await store.getById("g1"))?.status };
+  };
+
+  it("DELETEs the guest, marks it actioned and records the restore path", async () => {
+    const { calls, entry, status } = await run();
+    assert.deepEqual(calls, ["DELETE /users/subject-g1"]);
+    assert.equal(entry.result, "success");
+    assert.equal(entry.target, "/users/subject-g1");
+    assert.equal(entry.restorePath, guestRestorePath("subject-g1"));
+    assert.equal(
+      entry.restorePath,
+      "Within 30 days: POST /directory/deletedItems/subject-g1/restore"
+    );
+    assert.equal(status, "actioned");
+  });
+
+  it("counts a 404 as fixed only when deletedItems confirms the guest is gone", async () => {
+    const { calls, entry, status } = await run({ del: graphError(404, "Not Found") });
+    assert.deepEqual(calls, [
+      "DELETE /users/subject-g1",
+      "GET /directory/deletedItems/subject-g1",
+    ]);
+    assert.equal(entry.result, "success");
+    assert.equal(entry.restorePath, guestRestorePath("subject-g1"));
+    assert.equal(status, "actioned");
+  });
+
+  it("keeps the finding open on a 404 that deletedItems does not confirm", async () => {
+    const { entry, status } = await run({
+      del: graphError(404, "Not Found"),
+      get: graphError(404, "deleted item not found"),
+    });
+    assert.equal(entry.result, "failure");
+    assert.equal(entry.error, "Not Found");
+    assert.equal(entry.restorePath, null);
+    assert.equal(status, "open");
+  });
+
+  it("keeps the finding open and records the error on any other Graph failure", async () => {
+    const { calls, entry, status } = await run({ del: graphError(403, "403 Forbidden") });
+    assert.deepEqual(calls, ["DELETE /users/subject-g1"]);
+    assert.equal(entry.result, "failure");
+    assert.equal(entry.error, "403 Forbidden");
+    assert.equal(entry.restorePath, null);
+    assert.equal(status, "open");
   });
 });

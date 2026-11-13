@@ -16,6 +16,7 @@ import { extname, join, normalize, resolve } from "node:path";
 import { loadConfig } from "../config.js";
 import { SqliteFindingStore } from "../store/index.js";
 import { SqliteDecisionStore } from "../attestation/SqliteDecisionStore.js";
+import { SqliteAdminQueue } from "../attestation/SqliteAdminQueue.js";
 import { createGraphClient } from "../graph/index.js";
 import {
   createArchiveSiteHandler,
@@ -119,6 +120,7 @@ if (require.main === module) {
     findings,
     audit,
     decisions: new SqliteDecisionStore(config.dbPath),
+    queued: () => new SqliteAdminQueue(config.dbPath).list(),
     dispatch: (d) => dispatcher.dispatch(d),
     adminUpn: process.env["ADMIN_UPN"] || null,
   });

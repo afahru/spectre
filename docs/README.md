@@ -1,19 +1,14 @@
 # Spectre Documentation
 
-Spectre is a Microsoft 365 tenant ghost hunter. It scans a tenant for the
-five exposures that block a Copilot rollout, asks each content owner for a
-decision in plain English in Microsoft Teams, executes the approved fix, and
-shows the tenant admin a live Copilot-readiness score with an audit trail.
-This directory is the enterprise documentation set for the project. It is
-written for the people who deploy, operate, secure, and use Spectre, and it
-describes the system as it is built in this repository.
+Spectre is a Microsoft 365 tenant ghost hunter. It finds the five exposures that block a safe Copilot rollout, asks each content owner for a decision in plain English in Microsoft Teams, carries out the approved fix, and shows the tenant admin a live Copilot-readiness score with a full audit trail.
+
+The problem it solves is simple to state and expensive to ignore. Copilot follows the permissions already in your tenant, so overshared content reaches people who should never see it. Reports alone do not fix that. Spectre closes the loop: scan, ask the owner, act on the answer, and prove it in the audit log.
+
+This directory is the enterprise documentation set for the project. It is written for the people who deploy, operate, secure, and use Spectre, and it describes the system as it is built in this repository. Where a feature is not finished, the document says so plainly instead of presenting it as done.
 
 ## How to use this set
 
-Start with the document that matches your role, then follow its
-cross-references. Every document states which parts of the system it covers
-and which parts are not yet implemented, so a reader can tell what is real
-from what is planned.
+Start with the document that matches your role, then follow its cross-references. Every document states which parts of the system it covers and which parts are not yet implemented, so a reader can tell what is real from what is planned.
 
 | Document | Read it if you | Covers |
 |---|---|---|
@@ -27,63 +22,26 @@ from what is planned.
 
 ## Conventions used in this set
 
-- **Placeholders, never real values.** This repository is public. No
-  document in this set contains a real tenant ID, client ID, bot App ID,
-  email address, site ID, or URL. Where a value is needed, the document
-  uses a placeholder such as `<TENANT_ID>`, `<CLIENT_ID>`,
-  `<BOT_APP_ID>`, `<ADMIN_UPN>`, or `https://<your-tunnel>/api/messages`.
-  Fill each placeholder from your own deployment. Never commit a filled-in
-  copy.
-- **Unknown stays unknown.** Spectre never invents a number, a permission,
-  a user, or an owner. Where the system cannot confirm a figure, it records
-  and displays `null`, rendered as "unknown". This set follows the same rule:
-  where the code does not show something, the document says so instead of
-  guessing.
-- **Implemented versus planned.** A feature that exists only in a spec file
-  is labelled **planned, not implemented**. A feature that exists in code
-  but is not wired into a running server is labelled **implemented, not
-  wired**. The known gaps are collected in
-  [operations.md](operations.md#known-limitations) and in the per-document
-  notes.
-- **Source of truth.** The code in `src/`, the specs in `.kiro/specs/`,
-  and the steering rules in `.kiro/steering/` are authoritative. If this
-  documentation and the code disagree, the code governs and the document
-  should be corrected.
+- **Placeholders, never real values.** This repository is public. No document in this set contains a real tenant ID, client ID, bot App ID, email address, site ID, or URL. Where a value is needed, the document uses a placeholder such as `<TENANT_ID>`, `<CLIENT_ID>`, `<BOT_APP_ID>`, `<ADMIN_UPN>`, or `https://<your-tunnel>/api/messages`. Fill each placeholder from your own deployment. Never commit a filled-in copy.
+- **Unknown stays unknown.** Spectre never invents a number, a permission, a user, or an owner. Where the system cannot confirm a figure, it records and displays `null`, rendered as "unknown". This set follows the same rule: where the code does not show something, the document says so instead of guessing.
+- **Implemented versus planned.** A feature that exists only in a spec file is labelled **planned, not implemented**. A feature that exists in code but is not yet run on a schedule is labelled as such. The known gaps are collected in [operations.md](operations.md#5-known-limitations) and in the per-document notes.
+- **Source of truth.** The code in `src/`, the specs in `.kiro/specs/`, and the steering rules in `.kiro/steering/` are authoritative. If this documentation and the code disagree, the code governs and the document should be corrected.
 
 ## Project context
 
-Spectre is a Kiroween 2026 entry in the Frankenstein category. It is a new
-project, built during the submission period, and it is developed
-spec-first: every component has a requirements, design, and tasks file
-under `.kiro/specs/`. The four specs are:
+Spectre is a Kiroween 2026 entry in the Frankenstein category. It is a new project, built during the submission period, and it is developed spec-first: every component has a requirements, design, and tasks file under `.kiro/specs/`. The four specs are:
 
-- `spectre-scan-engine`: tenant inventory, flagging, permissions fetch,
-  deterministic scoring, fixture seeding.
-- `spectre-attestation-loop`: owner resolution, plain-English narration,
-  Teams Adaptive Card delivery, decision handling, nudge and escalation.
-- `spectre-remediation`: the dispatcher, the three remediation actions,
-  and the audit log.
-- `spectre-admin-console`: the service read API and the React admin
-  console.
+- `spectre-scan-engine`: tenant inventory, flagging, permissions fetch, deterministic scoring, fixture seeding.
+- `spectre-attestation-loop`: owner resolution, plain-English narration, Teams Adaptive Card delivery, decision handling, nudge and escalation.
+- `spectre-remediation`: the dispatcher, the three remediation actions, and the audit log.
+- `spectre-admin-console`: the service read API and the React admin console.
 
-The demo runs against the author's Microsoft 365 developer tenant. The
-service is a Node.js and TypeScript application that uses the Microsoft
-Graph SDK with application permissions, a SQLite findings store, a Teams
-Bot Framework bot for the owner loop, and a React admin console built with
-Fluent UI v9.
+The demo runs against the author's Microsoft 365 developer tenant. The service is a Node.js and TypeScript application that uses the Microsoft Graph SDK with application permissions, a SQLite findings store, a Teams Bot Framework bot for the owner loop, and a React admin console built with Fluent UI v9. The test suite passes 62 out of 62 tests. The demo video (1 minute 14 seconds) is at https://youtu.be/n7L3BMcbMEA.
 
 ## Related files outside this directory
 
-- `README.md` (repository root): product summary, evidence base, stack,
-  timeline.
-- `AGENTS.md` (repository root): the rules that bind work in this repo,
-  including spec-first development and the never-invent rule.
-- `.kiro/specs/*/requirements.md`, `design.md`, `tasks.md`: the
-  authoritative specifications.
-- `.kiro/specs/spectre-attestation-loop/bot-registration.md`: the manual
-  bot registration runbook.
-- `.kiro/steering/graph-conventions.md`, `narration-rule.md`,
-  `teams-cards.md`: the steering rules the code follows.
-- `WEEK2-IMPLEMENTATION-PLAN.md` (repository root): the Week 2 build
-  sequence and credit budget. This is a project planning note, not
-  product documentation.
+- `README.md` (repository root): product summary, evidence base, stack, timeline.
+- `AGENTS.md` (repository root): the rules that bind work in this repo, including spec-first development and the never-invent rule.
+- `.kiro/specs/*/requirements.md`, `design.md`, `tasks.md`: the authoritative specifications.
+- `.kiro/specs/spectre-attestation-loop/bot-registration.md`: the manual bot registration runbook.
+- `.kiro/steering/graph-conventions.md`, `narration-rule.md`, `teams-cards.md`: the steering rules the code follows.

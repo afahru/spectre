@@ -10,8 +10,15 @@
 import { loadConfig } from "../config.js";
 import { createGraphClient } from "../graph/index.js";
 import { SqliteFindingStore } from "../store/index.js";
-import { createDispatcher, SqliteAuditLog } from "../remediation/index.js";
-import { createDecisionHandler, InMemoryDecisionStore } from "./decision.js";
+import {
+  createArchiveSiteHandler,
+  createDispatcher,
+  createExpireGuestHandler,
+  createRevokeLinkHandler,
+  SqliteAuditLog,
+} from "../remediation/index.js";
+import { createDecisionHandler } from "./decision.js";
+import { SqliteDecisionStore } from "./SqliteDecisionStore.js";
 import { createConnectorSender, loadBotConfig, SqliteDeliveryStore } from "./delivery.js";
 import { createMessagingServer } from "./endpoint.js";
 
@@ -21,13 +28,19 @@ const graph = createGraphClient(config);
 const delivery = new SqliteDeliveryStore(config.dbPath);
 const findings = new SqliteFindingStore(config.dbPath);
 
-// Not wired here (out of scope for task group 2): a persistent DecisionStore
-// and the Graph action handlers. With no handlers the dispatcher refuses
-// Restrict/Archive and says so; it never executes anything.
-const dispatcher = createDispatcher({ store: findings, audit: new SqliteAuditLog(config.dbPath), handlers: {} });
+// Archive takes no delegated session (null), so archive decisions are queued as designed.
+const dispatcher = createDispatcher({
+  store: findings,
+  audit: new SqliteAuditLog(config.dbPath),
+  handlers: {
+    restrict: createRevokeLinkHandler(graph),
+    archive: createArchiveSiteHandler(graph, null),
+    revoke: createExpireGuestHandler(graph),
+  },
+});
 const handlePostback = createDecisionHandler({
   findings,
-  decisions: new InMemoryDecisionStore(),
+  decisions: new SqliteDecisionStore(config.dbPath),
   dispatch: (d) => dispatcher.dispatch(d),
 });
 

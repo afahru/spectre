@@ -5,3 +5,4 @@ export * from "./decision.js";
 export * from "./nudge.js";
 export * from "./delivery.js";
 export * from "./endpoint.js";
+export * from "./SqliteDecisionStore.js";

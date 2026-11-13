@@ -24,7 +24,7 @@ import type {
 } from "./types.js";
 
 const GHOST_TYPES: GhostType[] = ["overshared-site", "orphaned-site", "stale-guest", "idle-licence", "cold-storage"];
-const STATUSES: FindingStatus[] = ["open", "actioned", "dismissed"];
+const STATUSES: FindingStatus[] = ["open", "actioned", "dismissed", "superseded", "resolved"];
 
 /** Findings the attestation loop queued for the admin (no response / unreachable). */
 export interface QueuedException {

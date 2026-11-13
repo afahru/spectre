@@ -192,6 +192,21 @@ describe("console read API", () => {
     assert.equal((await api.findings(new URLSearchParams("status=bogus"))).status, 400);
   });
 
+  it("GET /findings accepts all five statuses and filters superseded and resolved", async () => {
+    const { api } = rig([
+      makeFinding("s1", "overshared-site", { status: "superseded" }),
+      makeFinding("s2", "overshared-site", { status: "resolved" }),
+      makeFinding("s3", "overshared-site"),
+    ]);
+    for (const s of ["open", "actioned", "dismissed", "superseded", "resolved"]) {
+      assert.equal((await api.findings(new URLSearchParams(`status=${s}`))).status, 200, s);
+    }
+    const sup = body<FindingsResponse>(await api.findings(new URLSearchParams("status=superseded")));
+    assert.deepEqual(sup.findings.map((v) => v.finding.id), ["s1"]);
+    const res = body<FindingsResponse>(await api.findings(new URLSearchParams("status=resolved")));
+    assert.deepEqual(res.findings.map((v) => v.finding.id), ["s2"]);
+  });
+
   it("GET /findings is empty when no scan is recorded", async () => {
     const { api } = rig([], { scan: null });
     assert.deepEqual(body<FindingsResponse>(await api.findings(new URLSearchParams())).findings, []);

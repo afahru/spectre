@@ -15,7 +15,9 @@ const useStyles = makeStyles({
   detail: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM },
 });
 
-export const STATUS_LABEL: Record<FindingStatus, string> = { open: "Open", actioned: "Actioned", dismissed: "Dismissed" };
+export const STATUS_LABEL: Record<FindingStatus, string> = {
+  open: "Open", actioned: "Actioned", dismissed: "Dismissed", superseded: "Superseded", resolved: "Resolved",
+};
 
 export const ownerText = (owner: string | null) => owner ?? "No owner";
 const summary = (v: FindingView) =>

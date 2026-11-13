@@ -1,0 +1,28 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "<APP_PACKAGE_VERSION>",
+  "id": "<BOT_APP_ID>",
+  "developer": {
+    "name": "<DEVELOPER_NAME>",
+    "websiteUrl": "<HTTPS_URL>",
+    "privacyUrl": "<HTTPS_URL>",
+    "termsOfUseUrl": "<HTTPS_URL>"
+  },
+  "name": { "short": "Spectre", "full": "Spectre oversharing attestation" },
+  "description": {
+    "short": "Asks you to decide on exposed content.",
+    "full": "Spectre sends you one plain-English card per exposed item and records your Keep, Restrict or Archive decision."
+  },
+  "icons": { "color": "color.png", "outline": "outline.png" },
+  "accentColor": "#5B2A86",
+  "bots": [
+    {
+      "botId": "<BOT_APP_ID>",
+      "scopes": ["personal"],
+      "supportsFiles": false,
+      "isNotificationOnly": false
+    }
+  ],
+  "validDomains": []
+}

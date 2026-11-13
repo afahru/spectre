@@ -12,13 +12,13 @@
     - _Steering: teams-cards; Requirements: 1.1, 2.1_
 
 - [ ] 2. Card delivery via the Teams bot
-  - [ ] 2.1 Register the bot in the dev tenant and install it org-wide
+  - [ ] 2.1 Register the bot in the dev tenant and install it org-wide (manual: see bot-registration.md)
     for the demo
     - _Design: Card delivery_
-  - [ ] 2.2 Send the proactive card and record the send timestamp; never
+  - [x] 2.2 Send the proactive card and record the send timestamp; never
     send the same finding twice without the nudge rule
     - _Requirements: 1.2_
-  - [ ] 2.3 Expose the HTTPS messaging endpoint for Action.Submit
+  - [x] 2.3 Expose the HTTPS messaging endpoint for Action.Submit
     postbacks
     - _Design: Card delivery_
 
